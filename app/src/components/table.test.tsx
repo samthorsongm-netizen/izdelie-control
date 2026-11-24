@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { Item, Occurrence } from '../model/types'
 import { buildTree, visibleRows } from '../model/tree'
 import { TreeTable } from './TreeTable'
