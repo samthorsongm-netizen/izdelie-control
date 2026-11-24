@@ -14,12 +14,6 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
-env:
-  # имена могут быть VITE_* или NEXT_PUBLIC_* (так их предлагает сам Supabase),
-  # лежать могут как в Variables, так и в Secrets
-  SB_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
-  SB_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,15 +22,6 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
-
-      - name: Есть ли переменные Supabase
-        run: |
-          echo "URL длиной: ${#SB_URL} символов"
-          echo "KEY длиной: ${#SB_KEY} символов"
-          if [ -z "$SB_URL" ] || [ -z "$SB_KEY" ]; then
-            echo "::error::Переменные Supabase не найдены. Settings → Secrets and variables → Actions: добавьте NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY."
-            exit 1
-          fi
 
       - uses: pnpm/action-setup@v4
         with:
@@ -49,18 +34,16 @@ jobs:
       # strict-dep-builds=false: сборка esbuild нам не нужна (бинарник едет в @esbuild/* пакете)
       - run: pnpm install --no-frozen-lockfile --config.strict-dep-builds=false
 
+      # адрес и publishable-ключ Supabase лежат в app/.env.production
       - run: pnpm build
-        env:
-          VITE_SUPABASE_URL: ${{ env.SB_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ env.SB_KEY }}
 
-      - name: Проверка, что адрес вшит в бандл
-        if: always()
+      - name: Проверка, что адрес Supabase вшит в бандл
         run: |
-          if grep -rqF "$SB_URL" dist/assets/*.js; then
-            echo "Supabase вшит в бандл: да"
+          url=$(grep '^VITE_SUPABASE_URL=' .env.production | cut -d= -f2-)
+          if grep -qF "$url" dist/assets/*.js; then
+            echo "Supabase в бандле: $url"
           else
-            echo "::error::Адрес Supabase не попал в собранный бандл"
+            echo "::error::Адрес Supabase из .env.production не попал в собранный бандл"
             exit 1
           fi
 
