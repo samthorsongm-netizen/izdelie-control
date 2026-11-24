@@ -9,6 +9,22 @@ export const cloudEnabled = Boolean(url && anon)
 
 export const sb: SupabaseClient | null = cloudEnabled ? createClient(url!, anon!) : null
 
+/** Разбудить проект Supabase, пока пользователь вводит пароль (free-план засыпает). */
+export async function warmup(): Promise<void> {
+  if (!cloudEnabled) return
+  try {
+    await fetch(`${url}/auth/v1/health`, { cache: 'no-store' })
+  } catch {
+    /* не критично */
+  }
+}
+
+/** Список людей не меняется каждую минуту — держим в памяти на сессию. */
+let peopleCache: string[] | null = null
+export function resetPeopleCache() {
+  peopleCache = null
+}
+
 function db(): SupabaseClient {
   if (!sb) throw new Error('Supabase не настроен')
   return sb
@@ -83,6 +99,7 @@ export async function createUser(email: string, password: string, name: string, 
   if (!uid) throw new Error('Пользователь не создан. Проверьте настройки регистрации в Supabase.')
   const { error: e2 } = await db().from('profiles').update({ role }).eq('id', uid)
   if (e2) throw new Error(`Пользователь создан, но роль не выставлена: ${e2.message}`)
+  resetPeopleCache()
   return uid
 }
 
@@ -97,10 +114,12 @@ export const cloudRepo: Repo = {
   },
 
   async listPeople() {
+    if (peopleCache) return peopleCache
     const { data, error } = await db().from('profiles').select('name,email').order('name')
     if (error) throw new Error(error.message)
     const names = (data ?? []).map((r: { name: string | null; email: string | null }) => (r.name || r.email || '').trim())
-    return [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'))
+    peopleCache = [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'))
+    return peopleCache
   },
 
   async findItemByDesignation(productId: string, designation: string) {
