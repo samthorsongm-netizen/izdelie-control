@@ -24,6 +24,7 @@ interface Filters {
 }
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e))
+const family = (k: Kind) => (k === 'assembly' || k === 'assembly_bch' ? 'asm' : k === 'purchased' ? 'buy' : 'part')
 
 export function ProductPage({
   repo,
@@ -51,6 +52,7 @@ export function ProductPage({
   const [busy, setBusy] = useState(false)
   const [undoInfo, setUndoInfo] = useState<{ label: string; n: number }>({ label: '', n: 0 })
   const [people, setPeople] = useState<string[]>([])
+  const [merging, setMerging] = useState<{ draft: Item; target: Item } | null>(null)
   const [view, setView] = useState<'tree' | 'qty'>('tree')
   const undoRef = useRef<{ label: string; before: Snapshot }[]>([])
 
@@ -191,9 +193,57 @@ export function ProductPage({
     )
   }
 
-  const onSaveItem = (next: Item) => {
+  /** Сохранение свойств: если номер уже занят другой позицией — предлагаем объединить. */
+  const onSaveItem = async (next: Item) => {
     setEditing(null)
+    const d = next.designation?.trim()
+    if (d) {
+      const other = await repo.findItemByDesignation(productId, d).catch(() => null)
+      if (other && other.id !== next.id) {
+        if (!canStructure) {
+          setToast({ text: `Номер ${d} уже занят другой позицией`, bad: true })
+          return
+        }
+        setMerging({ draft: next, target: other })
+        return
+      }
+    }
     onField(next, {}, `Свойства — ${next.name}`)
+  }
+
+  /** Слияние двух записей одной детали: вхождения переезжают, отметки складываются. */
+  const doMerge = async (draft: Item, target: Item) => {
+    setMerging(null)
+    if (!snap) return
+    if (family(draft.kind) !== family(target.kind)) {
+      setToast({ text: 'Сборку с деталью объединить нельзя — сначала приведите типы к одной группе', bad: true })
+      return
+    }
+    const stages: Item['stages'] = { ...draft.stages }
+    for (const [k, v] of Object.entries(target.stages)) if (v) stages[k as StageId] = true
+    const merged: Item = {
+      ...target,
+      name: target.name || draft.name,
+      kind: draft.kind,
+      bch_ref: target.bch_ref || draft.bch_ref,
+      supplier: target.supplier || draft.supplier,
+      manufacturer_part_no: target.manufacturer_part_no || draft.manufacturer_part_no,
+      comment: [target.comment, draft.comment].filter(Boolean).join('\n') || null,
+      responsible_3d: target.responsible_3d || draft.responsible_3d,
+      due_3d: target.due_3d || draft.due_3d,
+      responsible_dwg: target.responsible_dwg || draft.responsible_dwg,
+      due_dwg: target.due_dwg || draft.due_dwg,
+      stages,
+    }
+    await commit(
+      `Объединено: ${merged.name}`,
+      (s) => ({
+        ...s,
+        items: s.items.filter((i) => i.id !== draft.id).map((i) => (i.id === target.id ? merged : i)),
+        occurrences: s.occurrences.map((o) => (o.item_id === draft.id ? { ...o, item_id: target.id } : o)),
+      }),
+      () => repo.mergeItems(draft.id, target.id, merged),
+    )
   }
 
   const onAdd = async (payload: AddPayload) => {
@@ -594,6 +644,31 @@ export function ProductPage({
             setMoving(null)
             if (n) void onMoveNode(n, pid)
           }}
+        />
+      )}
+
+      {merging && (
+        <Confirm
+          title="Такой номер уже есть"
+          text={
+            <>
+              <p>
+                Номер <b>{merging.draft.designation}</b> уже стоит у позиции <b>{merging.target.name}</b>. Один номер ТС —
+                одна позиция, отметки и сроки у неё общие для всех сборок.
+              </p>
+              <p className="small muted">
+                Объединить в одну? Вхождения второй записи переедут в первую, отметки сложатся, лишняя запись удалится.
+              </p>
+            </>
+          }
+          onClose={() => setMerging(null)}
+          actions={[
+            {
+              label: 'Объединить',
+              tone: 'primary',
+              onClick: () => void doMerge(merging.draft, merging.target),
+            },
+          ]}
         />
       )}
 
