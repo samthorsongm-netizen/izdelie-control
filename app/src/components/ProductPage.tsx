@@ -52,7 +52,7 @@ export function ProductPage({
   const [busy, setBusy] = useState(false)
   const [undoInfo, setUndoInfo] = useState<{ label: string; n: number }>({ label: '', n: 0 })
   const [people, setPeople] = useState<string[]>([])
-  const [merging, setMerging] = useState<{ draft: Item; target: Item } | null>(null)
+  const [merging, setMerging] = useState<{ draft: Item; target: Item; old: string } | null>(null)
   const [view, setView] = useState<'tree' | 'qty'>('tree')
   const undoRef = useRef<{ label: string; before: Snapshot }[]>([])
 
@@ -193,7 +193,7 @@ export function ProductPage({
     )
   }
 
-  /** Сохранение свойств: если номер уже занят другой позицией — предлагаем объединить. */
+  /** Сохранение свойств: если номер уже занят другой позицией — предлагаем объединить или обменять. */
   const onSaveItem = async (next: Item) => {
     setEditing(null)
     const d = next.designation?.trim()
@@ -204,11 +204,32 @@ export function ProductPage({
           setToast({ text: `Номер ${d} уже занят другой позицией`, bad: true })
           return
         }
-        setMerging({ draft: next, target: other })
+        setMerging({ draft: next, target: other, old: snap?.items.find((i) => i.id === next.id)?.designation ?? '' })
         return
       }
     }
     onField(next, {}, `Свойства — ${next.name}`)
+  }
+
+  /** Обмен номерами двух разных деталей: 1234 ↔ 1235. */
+  const doSwap = async (draft: Item, target: Item, old: string) => {
+    setMerging(null)
+    if (!snap || !old.trim()) return
+    const next = draft.designation ?? ''
+    if (family(draft.kind) !== family(target.kind)) {
+      setToast({ text: 'У детали и сборки номера не меняем — это разные позиции', bad: true })
+      return
+    }
+    await commit(
+      `Обмен номерами: ${old} ↔ ${next}`,
+      (s) => ({
+        ...s,
+        items: s.items.map((i) =>
+          i.id === draft.id ? { ...i, designation: next } : i.id === target.id ? { ...i, designation: old } : i,
+        ),
+      }),
+      () => repo.swapDesignations(draft.id, target.id),
+    )
   }
 
   /** Слияние двух записей одной детали: вхождения переезжают, отметки складываются. */
@@ -649,23 +670,34 @@ export function ProductPage({
 
       {merging && (
         <Confirm
-          title="Такой номер уже есть"
+          title="Номер уже занят"
           text={
             <>
               <p>
-                Номер <b>{merging.draft.designation}</b> уже стоит у позиции <b>{merging.target.name}</b>. Один номер ТС —
-                одна позиция, отметки и сроки у неё общие для всех сборок.
+                Меняли номер <b>{merging.old || '—'}</b> на <b>{merging.draft.designation}</b>. Такой номер уже стоит у
+                позиции <b>{merging.target.name}</b>.
               </p>
               <p className="small muted">
-                Объединить в одну? Вхождения второй записи переедут в первую, отметки сложатся, лишняя запись удалится.
+                <b>Объединить</b> — если это одна и та же деталь: вхождения съедутся в одну запись, отметки сложатся.
+                <br />
+                <b>Обменять</b> — если номера просто перепутаны местами: у этой позиции станет{' '}
+                {merging.target.designation}, у второй — {merging.old}.
               </p>
             </>
           }
           onClose={() => setMerging(null)}
           actions={[
+            ...(merging.old.trim()
+              ? [
+                  {
+                    label: 'Обменять номера',
+                    onClick: () => void doSwap(merging.draft, merging.target, merging.old),
+                  },
+                ]
+              : []),
             {
               label: 'Объединить',
-              tone: 'primary',
+              tone: 'primary' as const,
               onClick: () => void doMerge(merging.draft, merging.target),
             },
           ]}
