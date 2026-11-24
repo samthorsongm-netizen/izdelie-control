@@ -14,6 +14,12 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  # имена могут быть VITE_* или NEXT_PUBLIC_* (так их предлагает сам Supabase),
+  # лежать могут как в Variables, так и в Secrets
+  SB_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  SB_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,6 +28,15 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+
+      - name: Есть ли переменные Supabase
+        run: |
+          echo "URL длиной: ${#SB_URL} символов"
+          echo "KEY длиной: ${#SB_KEY} символов"
+          if [ -z "$SB_URL" ] || [ -z "$SB_KEY" ]; then
+            echo "::error::Переменные Supabase не найдены. Settings → Secrets and variables → Actions: добавьте NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY."
+            exit 1
+          fi
 
       - uses: pnpm/action-setup@v4
         with:
@@ -34,19 +49,18 @@ jobs:
       # strict-dep-builds=false: сборка esbuild нам не нужна (бинарник едет в @esbuild/* пакете)
       - run: pnpm install --no-frozen-lockfile --config.strict-dep-builds=false
 
-      # имена могут быть VITE_* или NEXT_PUBLIC_* (так их предлагает сам Supabase),
-      # и лежать могут как в Variables, так и в Secrets
       - run: pnpm build
         env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ env.SB_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ env.SB_KEY }}
 
-      - name: Проверка, что Supabase попал в сборку
+      - name: Проверка, что адрес вшит в бандл
+        if: always()
         run: |
-          if grep -rq "supabase.co" dist/assets/*.js; then
-            echo "Supabase подключён"
+          if grep -rqF "$SB_URL" dist/assets/*.js; then
+            echo "Supabase вшит в бандл: да"
           else
-            echo "::error::Supabase не подключён — проверьте переменные в Settings → Secrets and variables → Actions"
+            echo "::error::Адрес Supabase не попал в собранный бандл"
             exit 1
           fi
 
