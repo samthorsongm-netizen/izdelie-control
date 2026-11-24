@@ -99,6 +99,21 @@ export const localRepo: Repo = {
     return [...names].sort((a, b) => a.localeCompare(b, 'ru'))
   },
 
+  async findItemByDesignation(productId: string, designation: string) {
+    const db = await read()
+    const d = designation.trim().toLowerCase()
+    return db.items.find((i) => i.product_id === productId && (i.designation ?? '').trim().toLowerCase() === d) ?? null
+  },
+
+  async mergeItems(fromId: string, toId: string, patch: Partial<Item>) {
+    await tx((db) => {
+      db.occurrences = db.occurrences.map((o) => (o.item_id === fromId ? { ...o, item_id: toId } : o))
+      const k = db.items.findIndex((i) => i.id === toId)
+      if (k >= 0) db.items[k] = { ...db.items[k], ...patch, id: toId, product_id: db.items[k].product_id }
+      db.items = db.items.filter((i) => i.id !== fromId)
+    })
+  },
+
   async loadProduct(id): Promise<Snapshot> {
     const db = await read()
     return {
@@ -135,7 +150,6 @@ export const localRepo: Repo = {
         if (rootItem && p.code) rootItem.designation = p.code
         return
       }
-      // у каждого изделия ровно один корень — сама сборка изделия
       const root: Item = {
         id: crypto.randomUUID(),
         product_id: p.id,
