@@ -31,7 +31,7 @@ export async function exportXlsx(snap: Snapshot): Promise<void> {
       NB.repeat(n.depth * 4) + i.name,
       KIND_LABEL[i.kind],
       i.designation ?? '',
-      n.item.kind === 'assembly' || n.item.kind === 'assembly_bch' ? '' : n.occ.qty,
+      n.occ.qty,
       i.bch_ref ?? '',
       ...STAGES.map((s) => (hasStage(i.kind, s.id) ? (i.stages[s.id] ? '✓' : '') : '')),
       Math.round(pr.own * 100) / 100,

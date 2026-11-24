@@ -33,7 +33,7 @@ export function buildTree(items: Item[], occs: Occurrence[]): Tree {
   const visit = (o: Occurrence, depth: number, guard: Set<string>): Node => {
     const node: Node = { occ: o, item: byItemId.get(o.item_id)!, depth, children: [] }
     byOcc.set(o.id, node)
-    if (guard.has(o.id)) return node // страховка от цикла в данных
+    if (guard.has(o.id)) return node
     guard.add(o.id)
     for (const c of childrenOf.get(o.id) ?? []) node.children.push(visit(c, depth + 1, guard))
     return node
@@ -78,8 +78,7 @@ export function subtree(node: Node): Node[] {
 }
 
 /**
- * Готовность узла: своя (только его этапы) и с детьми (среднее по всем
- * различным позициям поддерева — одна деталь считается один раз).
+ * Готовность узла: своя и с детьми (среднее по разным позициям поддерева).
  */
 export function progress(node: Node): { own: number; withChildren: number; items: number } {
   const seen = new Map<string, Item>()
@@ -107,6 +106,27 @@ export function canMoveInto(tree: Tree, occId: string, targetOccId: string | nul
 /** В скольких РАЗНЫХ сборках стоит позиция (не количество, а число родителей). */
 export function parentCount(tree: Tree, itemId: string): number {
   return new Set((tree.usesOf.get(itemId) ?? []).map((o) => o.parent_id)).size
+}
+
+/**
+ * Сколько всего нужно на изделие: количество вхождения умножается на
+ * количество всех сборок-родителей до корня.
+ */
+export function totalQty(tree: Tree, itemId: string): number {
+  let sum = 0
+  for (const o of tree.usesOf.get(itemId) ?? []) {
+    let mult = o.qty
+    let p = o.parent_id
+    let guard = 0
+    while (p && guard++ < 64) {
+      const node = tree.byOcc.get(p)
+      if (!node) break
+      mult *= node.occ.qty
+      p = node.occ.parent_id
+    }
+    sum += mult
+  }
+  return Math.round(sum * 1000) / 1000
 }
 
 /** Путь «Сборка → Сборка → Деталь» для подсказки «где используется». */
