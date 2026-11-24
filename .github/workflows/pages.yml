@@ -34,11 +34,19 @@ jobs:
       # strict-dep-builds=false: сборка esbuild нам не нужна (бинарник едет в @esbuild/* пакете)
       - run: pnpm install --no-frozen-lockfile --config.strict-dep-builds=false
 
-      # адрес и anon-ключ Supabase — в Settings → Secrets and variables → Actions → Variables
+      # подхватываем и Variables, и Secrets — чтобы не зависеть от того, куда их положили
       - run: pnpm build
         env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Проверка, что Supabase попал в сборку
+        run: |
+          if grep -rq "supabase.co" dist/assets/*.js; then
+            echo "Supabase подключён"
+          else
+            echo "::warning::Supabase не подключён — сайт соберётся в демо-режиме"
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
