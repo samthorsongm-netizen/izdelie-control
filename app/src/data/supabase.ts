@@ -96,6 +96,13 @@ export const cloudRepo: Repo = {
     return (data ?? []) as Product[]
   },
 
+  async listPeople() {
+    const { data, error } = await db().from('profiles').select('name,email').order('name')
+    if (error) throw new Error(error.message)
+    const names = (data ?? []).map((r: { name: string | null; email: string | null }) => (r.name || r.email || '').trim())
+    return [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'))
+  },
+
   async loadProduct(id): Promise<Snapshot> {
     const [p, i, o] = await Promise.all([
       db().from('products').select('id,code,name').eq('id', id).single(),

@@ -88,6 +88,17 @@ export const localRepo: Repo = {
     return (await read()).products
   },
 
+  async listPeople() {
+    const db = await read()
+    const names = new Set<string>()
+    for (const i of db.items) {
+      if (i.responsible_3d) names.add(i.responsible_3d)
+      if (i.responsible_dwg) names.add(i.responsible_dwg)
+    }
+    if (localRepo.me?.name) names.add(localRepo.me.name)
+    return [...names].sort((a, b) => a.localeCompare(b, 'ru'))
+  },
+
   async loadProduct(id): Promise<Snapshot> {
     const db = await read()
     return {
