@@ -1,10 +1,9 @@
-import seed from './seed.json'
 import type { EventLog, Item, Occurrence, Product, Profile, Snapshot } from '../model/types'
 import type { Repo } from './repo'
 
 /**
  * Демо-хранилище: данные в localStorage, без сервера.
- * Нужно, чтобы приложение можно было пощупать до настройки Supabase.
+ * Стартовые данные берутся из public/seed.json (если его нет — демо пустое).
  */
 const KEY = 'izdelie-control:v1'
 
@@ -15,24 +14,40 @@ interface Db {
   events: EventLog[]
 }
 
-function fromSeed(): Db {
-  const p = seed.product as Product
-  const items = (seed.items as unknown as Omit<Item, 'product_id'>[]).map((i) => ({ ...i, product_id: p.id }))
-  const occs = (seed.occurrences as Occurrence[]).map((o) => ({ ...o, product_id: p.id }))
-  return { products: [p], items, occurrences: occs, events: [] }
+const empty = (): Db => ({ products: [], items: [], occurrences: [], events: [] })
+
+let seedPromise: Promise<Db> | null = null
+
+function loadSeed(): Promise<Db> {
+  if (!seedPromise) {
+    seedPromise = fetch(`${import.meta.env.BASE_URL}seed.json`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (!s?.product) return empty()
+        const p = s.product as Product
+        return {
+          products: [p],
+          items: (s.items as Omit<Item, 'product_id'>[]).map((i) => ({ ...i, product_id: p.id })),
+          occurrences: (s.occurrences as Occurrence[]).map((o) => ({ ...o, product_id: p.id })),
+          events: [],
+        }
+      })
+      .catch(() => empty())
+  }
+  return seedPromise
 }
 
-function read(): Db {
+async function read(): Promise<Db> {
   const raw = localStorage.getItem(KEY)
   if (!raw) {
-    const db = fromSeed()
+    const db = await loadSeed()
     write(db)
     return db
   }
   try {
     return JSON.parse(raw) as Db
   } catch {
-    const db = fromSeed()
+    const db = await loadSeed()
     write(db)
     return db
   }
@@ -44,6 +59,7 @@ function write(db: Db) {
 
 export function resetDemo() {
   localStorage.removeItem(KEY)
+  seedPromise = null
 }
 
 const listeners = new Set<() => void>()
@@ -56,8 +72,8 @@ if (typeof window !== 'undefined') {
   })
 }
 
-function tx<T>(fn: (db: Db) => T): T {
-  const db = read()
+async function tx<T>(fn: (db: Db) => T): Promise<T> {
+  const db = await read()
   const out = fn(db)
   write(db)
   notify()
@@ -69,11 +85,11 @@ export const localRepo: Repo = {
   me: { id: 'demo', email: 'demo@local', name: 'Тодорович', role: 'admin' } as Profile,
 
   async listProducts() {
-    return read().products
+    return (await read()).products
   },
 
   async loadProduct(id): Promise<Snapshot> {
-    const db = read()
+    const db = await read()
     return {
       product: db.products.find((p) => p.id === id)!,
       items: db.items.filter((i) => i.product_id === id),
@@ -82,7 +98,7 @@ export const localRepo: Repo = {
   },
 
   async createProduct(p, cloneFrom) {
-    tx((db) => {
+    await tx((db) => {
       db.products.push(p)
       if (cloneFrom) {
         const map = new Map<string, string>()
@@ -131,7 +147,7 @@ export const localRepo: Repo = {
   },
 
   async deleteProduct(id) {
-    tx((db) => {
+    await tx((db) => {
       db.products = db.products.filter((p) => p.id !== id)
       db.items = db.items.filter((i) => i.product_id !== id)
       db.occurrences = db.occurrences.filter((o) => o.product_id !== id)
@@ -139,39 +155,37 @@ export const localRepo: Repo = {
   },
 
   async insertItem(i) {
-    tx((db) => void db.items.push(i))
+    await tx((db) => void db.items.push(i))
   },
   async updateItem(i) {
-    tx((db) => {
+    await tx((db) => {
       const k = db.items.findIndex((x) => x.id === i.id)
       if (k >= 0) db.items[k] = i
     })
   },
   async deleteItem(id) {
-    tx((db) => void (db.items = db.items.filter((x) => x.id !== id)))
+    await tx((db) => void (db.items = db.items.filter((x) => x.id !== id)))
   },
   async insertOcc(o) {
-    tx((db) => void db.occurrences.push(o))
+    await tx((db) => void db.occurrences.push(o))
   },
   async updateOcc(o) {
-    tx((db) => {
+    await tx((db) => {
       const k = db.occurrences.findIndex((x) => x.id === o.id)
       if (k >= 0) db.occurrences[k] = o
     })
   },
   async deleteOcc(id) {
-    tx((db) => void (db.occurrences = db.occurrences.filter((x) => x.id !== id)))
+    await tx((db) => void (db.occurrences = db.occurrences.filter((x) => x.id !== id)))
   },
   async log(e) {
-    tx((db) => {
+    await tx((db) => {
       db.events.unshift({ ...e, id: Date.now(), created_at: new Date().toISOString() })
       db.events = db.events.slice(0, 500)
     })
   },
   async listEvents(productId, limit) {
-    return read()
-      .events.filter((e) => e.product_id === productId)
-      .slice(0, limit)
+    return (await read()).events.filter((e) => e.product_id === productId).slice(0, limit)
   },
   subscribe(_productId, cb) {
     listeners.add(cb)

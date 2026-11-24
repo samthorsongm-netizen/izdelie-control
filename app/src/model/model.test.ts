@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import seed from '../data/seed.json'
 import type { Item, Occurrence, Snapshot } from './types'
 import { applicableStages, hasStage, isOverdue, progressOf, statusOf } from './stages'
 import { buildTree, canMoveInto, progress as nodeProgress, pathTitles, subtree, visibleRows, walk } from './tree'
@@ -89,8 +88,7 @@ describe('дерево', () => {
 
   it('готовность с детьми считает позиции один раз', () => {
     const t = buildTree(items, occs)
-    const root = t.roots[0]
-    const pr = nodeProgress(root)
+    const pr = nodeProgress(t.roots[0])
     expect(pr.items).toBe(3)
     expect(pr.own).toBe(0)
   })
@@ -120,33 +118,36 @@ describe('дерево', () => {
   })
 })
 
-describe('импорт примера', () => {
-  const items = seed.items as unknown as Item[]
-  const occs = seed.occurrences as unknown as Occurrence[]
-  const tree = buildTree(items, occs)
+describe('выгрузка изделия: инварианты структуры', () => {
+  const items = [
+    item({ id: 'i1', designation: '6282-2103700-10', name: 'Электродвигатель', kind: 'assembly' }),
+    item({ id: 'i2', designation: '6282-2103740-10', name: 'Крышка' }),
+    item({ id: 'i3', designation: null, name: 'Винты крышки', kind: 'purchased' }),
+  ]
+  const occs: Occurrence[] = [
+    { id: 'o1', product_id: 'p', parent_id: null, item_id: 'i1', qty: 1, sort: 1 },
+    { id: 'o2', product_id: 'p', parent_id: 'o1', item_id: 'i2', qty: 1, sort: 1 },
+    { id: 'o3', product_id: 'p', parent_id: 'o1', item_id: 'i2', qty: 1, sort: 2 },
+    { id: 'o4', product_id: 'p', parent_id: 'o2', item_id: 'i3', qty: 4, sort: 1 },
+  ]
 
-  it('78 позиций, 92 вхождения, один корень', () => {
-    expect(items).toHaveLength(78)
-    expect(occs).toHaveLength(92)
-    expect(tree.roots).toHaveLength(1)
-  })
-
-  it('все вхождения достижимы от корня, без циклов', () => {
+  it('один корень, все вхождения достижимы, циклов нет', () => {
+    const t = buildTree(items, occs)
+    expect(t.roots).toHaveLength(1)
     let n = 0
-    walk(tree.roots, () => n++)
-    expect(n).toBe(92)
+    walk(t.roots, () => n++)
+    expect(n).toBe(occs.length)
   })
 
-  it('дубли схлопнуты: уникальные номера ТС', () => {
+  it('номер ТС не повторяется у разных позиций', () => {
     const desig = items.map((i) => i.designation).filter(Boolean)
     expect(new Set(desig).size).toBe(desig.length)
-    expect(items.filter((i) => !i.designation)).toHaveLength(30)
   })
 
-  it('глубина дерева 5 уровней (0..4)', () => {
-    let max = 0
-    walk(tree.roots, (n) => (max = Math.max(max, n.depth)))
-    expect(max).toBe(4)
+  it('одинаковая деталь в двух местах — две строки, одна позиция', () => {
+    const t = buildTree(items, occs)
+    expect(t.usesOf.get('i2')).toHaveLength(2)
+    expect(t.byItemId.size).toBe(3)
   })
 })
 
@@ -176,8 +177,7 @@ describe('отмена действия', () => {
     const { repo, items } = fakeRepo(before)
     const changed = { ...b, stages: { st_3d: true } }
     await repo.updateItem(changed)
-    const current: Snapshot = { product, items: [a, changed], occurrences: [oa, ob] }
-    await restoreSnapshot(repo, before, current)
+    await restoreSnapshot(repo, before, { product, items: [a, changed], occurrences: [oa, ob] })
     expect(items.get('b')!.stages).toEqual({})
   })
 
