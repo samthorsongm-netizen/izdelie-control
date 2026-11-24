@@ -103,6 +103,27 @@ export const cloudRepo: Repo = {
     return [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'))
   },
 
+  async findItemByDesignation(productId: string, designation: string) {
+    const { data, error } = await db()
+      .from('items')
+      .select('*')
+      .eq('product_id', productId)
+      .ilike('designation', designation.trim().replace(/[%_]/g, (m) => `\\${m}`))
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    return (data ?? null) as Item | null
+  },
+
+  async mergeItems(fromId: string, toId: string, patch: Partial<Item>) {
+    const { error: e1 } = await db().from('occurrences').update({ item_id: toId }).eq('item_id', fromId)
+    if (e1) throw new Error(e1.message)
+    const { id: _id, product_id: _pid, ...rest } = patch
+    const { error: e2 } = await db().from('items').update(rest).eq('id', toId)
+    if (e2) throw new Error(e2.message)
+    const { error: e3 } = await db().from('items').delete().eq('id', fromId)
+    if (e3) throw new Error(e3.message)
+  },
+
   async loadProduct(id): Promise<Snapshot> {
     const [p, i, o] = await Promise.all([
       db().from('products').select('id,code,name').eq('id', id).single(),
@@ -123,12 +144,10 @@ export const cloudRepo: Repo = {
     const { error } = await db().from('products').insert({ id: p.id, code: p.code, name: p.name })
     if (error) throw new Error(error.message)
     if (cloneFrom) {
-      // копирование структуры делает серверная функция: один запрос, без гонок
       const { error: e2 } = await db().rpc('clone_product_structure', { src: cloneFrom, dst: p.id, new_code: p.code })
       if (e2) throw new Error(e2.message)
       return
     }
-    // у изделия всегда есть корень — его собственная сборка
     const rootItem = {
       id: crypto.randomUUID(),
       product_id: p.id,
