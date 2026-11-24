@@ -1,0 +1,103 @@
+/* Тёмная тема и читаемая шкала прогресса. Подключается после styles.css. */
+
+/* ---------- шкала прогресса: процент на плашке, а не белым по светлому ---------- */
+.bar { height: 18px; }
+.bar > span {
+  inset: 0 0 0 auto;
+  width: auto;
+  padding: 0 5px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #16203a;
+  border-radius: 0 5px 5px 0;
+  text-shadow: none;
+  font-weight: 600;
+}
+
+/* ---------- тёмная тема ---------- */
+[data-theme='dark'] {
+  --bg: #121722;
+  --panel: #1a202c;
+  --ink: #e6ebf5;
+  --muted: #93a1ba;
+  --line: #2a3348;
+  --line-soft: #222a3a;
+  --accent: #6f9bff;
+  --accent-soft: #20304f;
+  --ok: #57d98a;
+  --ok-soft: #16341f;
+  --warn: #e8c268;
+  --warn-soft: #3a2f14;
+  --bad: #ff8070;
+  --bad-soft: #3a1f1c;
+  --na: #232b3a;
+}
+
+[data-theme='dark'] .topbar { background: #0f1420; }
+[data-theme='dark'] .banner { background: #2f2a16; color: #e8c268; border-bottom-color: #4a3f1a; }
+
+[data-theme='dark'] .btn { background: #1e2634; border-color: var(--line); color: var(--ink); }
+[data-theme='dark'] .btn:hover { background: #242e3f; border-color: #3a4761; }
+[data-theme='dark'] .btn.primary { background: #3b62b8; border-color: #3b62b8; color: #fff; }
+[data-theme='dark'] .btn.primary:hover { background: #4a72c9; }
+[data-theme='dark'] .btn.ghost { background: transparent; }
+
+[data-theme='dark'] .kpi,
+[data-theme='dark'] .table-wrap,
+[data-theme='dark'] .product-card,
+[data-theme='dark'] .modal,
+[data-theme='dark'] .login { background: var(--panel); border-color: var(--line); }
+
+[data-theme='dark'] table.grid thead th { background: #243050; }
+[data-theme='dark'] table.grid thead tr.groups th { background: #1a2338; }
+[data-theme='dark'] table.grid td, [data-theme='dark'] table.grid th { border-color: var(--line-soft); }
+[data-theme='dark'] table.grid tbody tr:hover td { background: #202836; }
+[data-theme='dark'] table.grid tbody tr:hover td.name-col { background: #202836; }
+[data-theme='dark'] table.grid tbody tr.sel td { background: var(--accent-soft); }
+[data-theme='dark'] table.grid tbody tr.sel td.name-col { background: var(--accent-soft); }
+[data-theme='dark'] td.name-col { background: var(--panel); }
+
+[data-theme='dark'] .tick { background: #232b3a; border-color: var(--line); color: var(--ink); }
+[data-theme='dark'] .tick.on { background: var(--ok-soft); border-color: #2f6b45; color: var(--ok); }
+[data-theme='dark'] .tick.na { background: var(--na); border: none; }
+
+[data-theme='dark'] .cell-input { color: var(--ink); }
+[data-theme='dark'] .cell-input:hover { background: #232b3a; border-color: var(--line); }
+[data-theme='dark'] .cell-input:focus { background: #1c2432; }
+[data-theme='dark'] .cell-input.empty { background: #2b2713; }
+[data-theme='dark'] select.cell-input { background: #1e2634; border-color: transparent; }
+[data-theme='dark'] option { background: #1e2634; color: var(--ink); }
+
+[data-theme='dark'] .field input,
+[data-theme='dark'] .field select,
+[data-theme='dark'] .field textarea,
+[data-theme='dark'] .toolbar input,
+[data-theme='dark'] .toolbar select,
+[data-theme='dark'] .chip-toggle { background: #151b26; border-color: var(--line); color: var(--ink); }
+[data-theme='dark'] .chip-toggle.on { background: var(--accent-soft); border-color: #33517f; color: #a9c2ff; }
+
+[data-theme='dark'] .modal-head, [data-theme='dark'] .modal-foot { border-color: var(--line); }
+[data-theme='dark'] .opt { border-color: var(--line-soft); }
+[data-theme='dark'] .opt:hover { background: #222a3a; }
+[data-theme='dark'] .opt-list { border-color: var(--line); }
+[data-theme='dark'] .ev { border-color: var(--line-soft); }
+
+[data-theme='dark'] .hl { background: #5a4a15; color: #ffe9a8; }
+[data-theme='dark'] .bch-ref { background: #1f3550; color: #8fbaff; }
+[data-theme='dark'] .usage-badge { background: var(--accent-soft); color: #a9c2ff; }
+
+[data-theme='dark'] .kind.assembly,
+[data-theme='dark'] .kind.assembly_bch { background: #22304f; color: #a9c2ff; }
+[data-theme='dark'] .kind.part,
+[data-theme='dark'] .kind.part_bch { background: #1e3a2a; color: #8fe0ac; }
+[data-theme='dark'] .kind.purchased { background: #3a2a1c; color: #f0b183; }
+
+[data-theme='dark'] .bar { background: #232b3a; }
+[data-theme='dark'] .bar > span { background: rgba(18, 23, 34, 0.8); color: #e6ebf5; }
+[data-theme='dark'] .bar.ghost > i { background: #4a6ea8; }
+
+[data-theme='dark'] .toast { background: #e6ebf5; color: #121722; }
+[data-theme='dark'] .toast.bad { background: var(--bad); color: #121722; }
+[data-theme='dark'] .empty-state { color: var(--muted); }
+[data-theme='dark'] td.overdue { box-shadow: inset 0 0 0 1px #a4453c; }
+[data-theme='dark'] td.soon { box-shadow: inset 0 0 0 1px #8a6a1c; }
+[data-theme='dark'] .login .err { color: var(--bad); }

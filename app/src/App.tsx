@@ -9,12 +9,20 @@ import { UsersDialog } from './components/UsersDialog'
 
 const repo: Repo = cloudEnabled ? cloudRepo : localRepo
 
+type Theme = 'light' | 'dark'
+
 export default function App() {
   const [me, setMe] = useState<Profile | null>(cloudEnabled ? null : localRepo.me)
   const [booting, setBooting] = useState(cloudEnabled)
   const [productId, setProductId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [users, setUsers] = useState(false)
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('ui-theme') === 'dark' ? 'dark' : 'light'))
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('ui-theme', theme)
+  }, [theme])
 
   useEffect(() => {
     if (!cloudEnabled) return
@@ -28,24 +36,37 @@ export default function App() {
     repo.me = me
   }, [me])
 
+  const themeBtn = (
+    <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Переключить тему">
+      {theme === 'dark' ? '☀ Светлая' : '☾ Тёмная'}
+    </button>
+  )
+
   if (booting) return <div className="empty-state">Загрузка…</div>
 
   if (!me) {
     return (
-      <Login
-        error={error}
-        onSubmit={async (email, password) => {
-          setError('')
-          try {
-            await signIn(email, password)
-            const p = await loadProfile()
-            if (!p) throw new Error('Профиль не найден. Попросите администратора выдать доступ.')
-            setMe(p)
-          } catch (e) {
-            setError(e instanceof Error ? e.message : String(e))
-          }
-        }}
-      />
+      <>
+        <div className="topbar">
+          <h1>Контроль разработки и выполнения изделия</h1>
+          <div className="spacer" />
+          {themeBtn}
+        </div>
+        <Login
+          error={error}
+          onSubmit={async (email, password) => {
+            setError('')
+            try {
+              await signIn(email, password)
+              const p = await loadProfile()
+              if (!p) throw new Error('Профиль не найден. Попросите администратора выдать доступ.')
+              setMe(p)
+            } catch (e) {
+              setError(e instanceof Error ? e.message : String(e))
+            }
+          }}
+        />
+      </>
     )
   }
 
@@ -57,6 +78,7 @@ export default function App() {
         <span className="who">
           {me.name} · {me.role === 'admin' ? 'полный доступ' : me.role === 'editor' ? 'отметки' : 'просмотр'}
         </span>
+        {themeBtn}
         {cloudEnabled && me.role === 'admin' && <button onClick={() => setUsers(true)}>Пользователи</button>}
         {cloudEnabled && (
           <button
