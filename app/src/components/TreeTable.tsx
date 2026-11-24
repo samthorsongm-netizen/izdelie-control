@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Item, Occurrence, StageId } from '../model/types'
 import { KIND_LABEL } from '../model/types'
 import { STATUS_LABEL, hasStage, isBch, isOverdue, isSoon, statusOf } from '../model/stages'
-import { canMoveInto, parentCount, progress as nodeProgress, type Node, type Tree } from '../model/tree'
+import { progress as nodeProgress, type Node, type Tree } from '../model/tree'
 
 export interface TreeTableProps {
   rows: Node[]
@@ -17,12 +17,12 @@ export interface TreeTableProps {
   onToggleCollapse: (occId: string) => void
   onToggleStage: (node: Node, stage: StageId) => void
   onField: (item: Item, patch: Partial<Item>, label: string) => void
+  onQty: (occ: Occurrence, qty: number) => void
   onAdd: (parentOccId: string | null) => void
   onEdit: (item: Item) => void
   onMove: (occ: Occurrence) => void
   onDelete: (node: Node) => void
-  onUsage: (item: Item) => void
-  onDrop: (sourceOccId: string, targetOccId: string) => void
+  onReorder: (sourceOccId: string, targetOccId: string, pos: 'before' | 'after') => void
 }
 
 function Highlight({ text, q }: { text: string; q: string }) {
@@ -111,6 +111,35 @@ function PersonCell({
   )
 }
 
+/** Количество в этой сборке. */
+function QtyCell({ value, disabled, onCommit }: { value: number; disabled?: boolean; onCommit: (v: number) => void }) {
+  const [v, setV] = useState(String(value))
+  useEffect(() => setV(String(value)), [value])
+  const commit = () => {
+    const n = Math.max(1, Math.round(Number(v.replace(',', '.')) || 1))
+    setV(String(n))
+    if (n !== value) onCommit(n)
+  }
+  return (
+    <input
+      className="cell-input qty"
+      type="number"
+      min={1}
+      value={v}
+      disabled={disabled}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') {
+          setV(String(value))
+          ;(e.target as HTMLInputElement).blur()
+        }
+      }}
+    />
+  )
+}
+
 /** Галка этапа: серый прочерк = этап для этого типа не нужен. */
 function Tick({ on, applicable, onClick, disabled }: { on: boolean; applicable: boolean; onClick: () => void; disabled?: boolean }) {
   if (!applicable) return <button className="tick na" disabled tabIndex={-1}>·</button>
@@ -128,7 +157,7 @@ function Tick({ on, applicable, onClick, disabled }: { on: boolean; applicable: 
 
 export function TreeTable(p: TreeTableProps) {
   const [dragId, setDragId] = useState<string | null>(null)
-  const [overId, setOverId] = useState<string | null>(null)
+  const [over, setOver] = useState<{ id: string; pos: 'before' | 'after' } | null>(null)
 
   return (
     <div className="table-wrap">
@@ -171,14 +200,13 @@ export function TreeTable(p: TreeTableProps) {
         <tbody>
           {p.rows.map((n) => {
             const item = n.item
-            const isAssembly = item.kind === 'assembly' || item.kind === 'assembly_bch'
             const pr = nodeProgress(n)
             const st = statusOf(item)
-            // сколько РАЗНЫХ сборок содержат эту позицию (не количество!)
-            const parents = parentCount(p.tree, item.id)
             const overdue = isOverdue(item)
             const soon = !overdue && isSoon(item)
-            const canDropHere = isAssembly && dragId && canMoveInto(p.tree, dragId, n.occ.id) && dragId !== n.occ.id
+            // тащим поверх другой строки — вставляем до/после неё (в том же родителе)
+            const canDropHere = !!dragId && dragId !== n.occ.id && n.depth > 0
+            const dropPos = over?.id === n.occ.id ? over.pos : null
 
             return (
               <tr
@@ -186,7 +214,7 @@ export function TreeTable(p: TreeTableProps) {
                 className={[
                   p.selected === n.occ.id ? 'sel' : '',
                   n.depth === 0 ? 'root' : '',
-                  overId === n.occ.id ? 'drop-target' : '',
+                  dropPos === 'before' ? 'drop-before' : dropPos === 'after' ? 'drop-after' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
@@ -194,14 +222,15 @@ export function TreeTable(p: TreeTableProps) {
                 onDragOver={(e) => {
                   if (!canDropHere) return
                   e.preventDefault()
-                  setOverId(n.occ.id)
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                  setOver({ id: n.occ.id, pos: e.clientY < r.top + r.height / 2 ? 'before' : 'after' })
                 }}
-                onDragLeave={() => setOverId((x) => (x === n.occ.id ? null : x))}
+                onDragLeave={() => setOver((x) => (x?.id === n.occ.id ? null : x))}
                 onDrop={(e) => {
-                  if (!canDropHere) return
+                  if (!canDropHere || !over) return
                   e.preventDefault()
-                  setOverId(null)
-                  if (dragId) p.onDrop(dragId, n.occ.id)
+                  p.onReorder(dragId!, n.occ.id, over.pos)
+                  setOver(null)
                   setDragId(null)
                 }}
               >
@@ -209,7 +238,7 @@ export function TreeTable(p: TreeTableProps) {
                   <div
                     className="name-cell"
                     style={{ paddingLeft: 4 + n.depth * 16 }}
-                    draggable={p.canStructure}
+                    draggable={p.canStructure && n.depth > 0}
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = 'move'
                       e.dataTransfer.setData('text/plain', n.occ.id)
@@ -234,18 +263,6 @@ export function TreeTable(p: TreeTableProps) {
                         </span>
                       )}
                     </span>
-                    {parents > 1 && (
-                      <button
-                        className="usage-badge"
-                        title="Одна и та же позиция стоит в нескольких сборках. Количество в колонке «Кол-во» — только для этой сборки."
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          p.onUsage(item)
-                        }}
-                      >
-                        в {parents} сборках
-                      </button>
-                    )}
                   </div>
                 </td>
 
@@ -253,7 +270,9 @@ export function TreeTable(p: TreeTableProps) {
                   <span className={`kind ${item.kind}`}>{KIND_LABEL[item.kind]}</span>
                 </td>
 
-                <td className="num">{isAssembly ? '' : n.occ.qty}</td>
+                <td className="num">
+                  <QtyCell value={n.occ.qty} disabled={!p.canStructure} onCommit={(v) => p.onQty(n.occ, v)} />
+                </td>
 
                 {/* 3D */}
                 <td className="c">
@@ -365,7 +384,7 @@ export function TreeTable(p: TreeTableProps) {
                     )}
                     {p.canStructure && n.depth > 0 && (
                       <>
-                        <button className="btn ghost sm" title="Переместить" onClick={(e) => { e.stopPropagation(); p.onMove(n.occ) }}>
+                        <button className="btn ghost sm" title="Переместить в другую сборку" onClick={(e) => { e.stopPropagation(); p.onMove(n.occ) }}>
                           ⇄
                         </button>
                         <button className="btn ghost sm" title="Удалить из сборки" onClick={(e) => { e.stopPropagation(); p.onDelete(n) }}>
@@ -390,8 +409,8 @@ export function TreeTable(p: TreeTableProps) {
       {p.rows.length > 0 && (
         <div className="row" style={{ padding: '10px 12px', borderTop: '1px solid var(--line-soft)' }}>
           <span className="small muted">
-            Строк: {p.rows.length}. Перетащите строку на сборку, чтобы перенести, или «+» на строке, чтобы добавить
-            внутрь.
+            Строк: {p.rows.length}. Перетащите строку на другую, чтобы переставить по порядку; «⇄» — перенос в другую
+            сборку; «+» — добавить внутрь. Количество — только для этой сборки.
           </span>
         </div>
       )}

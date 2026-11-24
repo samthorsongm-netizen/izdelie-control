@@ -1,4 +1,4 @@
-/* Тёмная тема и читаемая шкала прогресса. Подключается после styles.css. */
+/* Тёмная тема, читаемая шкала прогресса, количество, маркеры вставки. */
 
 /* ---------- шкала прогресса: процент на плашке, а не белым по светлому ---------- */
 .bar { height: 18px; }
@@ -12,6 +12,23 @@
   text-shadow: none;
   font-weight: 600;
 }
+
+/* ---------- количество в дереве ---------- */
+.cell-input.qty {
+  width: 46px;
+  min-width: 0;
+  text-align: right;
+  -moz-appearance: textfield;
+}
+.cell-input.qty::-webkit-outer-spin-button,
+.cell-input.qty::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ---------- маркер вставки при перетаскивании ---------- */
+table.grid tbody tr.drop-before td { box-shadow: inset 0 2px 0 0 var(--accent); }
+table.grid tbody tr.drop-after td { box-shadow: inset 0 -2px 0 0 var(--accent); }
 
 /* ---------- тёмная тема ---------- */
 [data-theme='dark'] {
