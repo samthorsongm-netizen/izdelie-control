@@ -11,6 +11,8 @@ export interface Repo {
   findItemByDesignation(productId: string, designation: string): Promise<Item | null>
   /** слить позицию fromId в toId: вхождения переезжают, fromId удаляется */
   mergeItems(fromId: string, toId: string, patch: Partial<Item>): Promise<void>
+  /** поменять номера ТС двух позиций местами (через временное значение) */
+  swapDesignations(aId: string, bId: string): Promise<void>
   createProduct(p: Product, cloneFrom?: string): Promise<void>
   deleteProduct(id: string): Promise<void>
   insertItem(i: Item): Promise<void>

@@ -143,6 +143,24 @@ export const cloudRepo: Repo = {
     if (e3) throw new Error(e3.message)
   },
 
+  async swapDesignations(aId: string, bId: string) {
+    const { data, error } = await db().from('items').select('id,designation').in('id', [aId, bId])
+    if (error) throw new Error(error.message)
+    const a = (data ?? []).find((x: { id: string }) => x.id === aId)
+    const b = (data ?? []).find((x: { id: string }) => x.id === bId)
+    if (!a || !b) throw new Error('Позиции для обмена не найдены')
+    // три шага через временный номер: уникальный индекс не даст обменять напрямую
+    const steps: [string, string | null][] = [
+      [aId, `__swap_${crypto.randomUUID()}`],
+      [bId, a.designation],
+      [aId, b.designation],
+    ]
+    for (const [id, value] of steps) {
+      const { error: e } = await db().from('items').update({ designation: value }).eq('id', id)
+      if (e) throw new Error(e.message)
+    }
+  },
+
   async loadProduct(id): Promise<Snapshot> {
     const [p, i, o] = await Promise.all([
       db().from('products').select('id,code,name').eq('id', id).single(),
