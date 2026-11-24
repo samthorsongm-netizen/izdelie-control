@@ -34,18 +34,20 @@ jobs:
       # strict-dep-builds=false: сборка esbuild нам не нужна (бинарник едет в @esbuild/* пакете)
       - run: pnpm install --no-frozen-lockfile --config.strict-dep-builds=false
 
-      # подхватываем и Variables, и Secrets — чтобы не зависеть от того, куда их положили
+      # имена могут быть VITE_* или NEXT_PUBLIC_* (так их предлагает сам Supabase),
+      # и лежать могут как в Variables, так и в Secrets
       - run: pnpm build
         env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY || vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Проверка, что Supabase попал в сборку
         run: |
           if grep -rq "supabase.co" dist/assets/*.js; then
             echo "Supabase подключён"
           else
-            echo "::warning::Supabase не подключён — сайт соберётся в демо-режиме"
+            echo "::error::Supabase не подключён — проверьте переменные в Settings → Secrets and variables → Actions"
+            exit 1
           fi
 
       - uses: actions/upload-pages-artifact@v3
