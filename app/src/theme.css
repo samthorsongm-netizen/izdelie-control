@@ -44,6 +44,10 @@
 table.grid tbody tr.drop-before td { box-shadow: inset 0 2px 0 0 var(--accent); }
 table.grid tbody tr.drop-after td { box-shadow: inset 0 -2px 0 0 var(--accent); }
 
+/* ---------- таблица без групповой шапки ---------- */
+/* у «Количества по изделию» только одна строка заголовков: липнет к верху, а не на 22px ниже */
+table.grid thead tr.cols:first-child th { top: 0; }
+
 /* ---------- тёмная тема ---------- */
 [data-theme='dark'] {
   --bg: #121722;
