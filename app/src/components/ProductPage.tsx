@@ -9,6 +9,7 @@ import { TreeTable } from './TreeTable'
 import { AddDialog, EditItemDialog, type AddPayload } from './ItemDialog'
 import { MoveDialog } from './MoveDialog'
 import { HistoryDialog, UsageDialog } from './InfoDialogs'
+import { QtyTable } from './QtyTable'
 import { Confirm } from './Modal'
 import { exportXlsx } from './exportXlsx'
 
@@ -50,6 +51,7 @@ export function ProductPage({
   const [busy, setBusy] = useState(false)
   const [undoInfo, setUndoInfo] = useState<{ label: string; n: number }>({ label: '', n: 0 })
   const [people, setPeople] = useState<string[]>([])
+  const [view, setView] = useState<'tree' | 'qty'>('tree')
   const undoRef = useRef<{ label: string; before: Snapshot }[]>([])
 
   const canEdit = me.role !== 'viewer'
@@ -137,6 +139,55 @@ export function ProductPage({
       label,
       (s) => ({ ...s, items: s.items.map((i) => (i.id === item.id ? next : i)) }),
       () => repo.updateItem(next),
+    )
+  }
+
+  const onQty = (occ: Occurrence, qty: number) => {
+    if (!canStructure) return
+    const next: Occurrence = { ...occ, qty }
+    void commit(
+      `Количество: ${tree?.byOcc.get(occ.id)?.item.name ?? ''} — ${qty}`,
+      (s) => ({ ...s, occurrences: s.occurrences.map((o) => (o.id === occ.id ? next : o)) }),
+      () => repo.updateOcc(next),
+    )
+  }
+
+  /** Перестановка строки относительно другой: вставить до/после в том же родителе. */
+  const onReorder = (srcId: string, targetId: string, pos: 'before' | 'after') => {
+    if (!snap || !tree || !canStructure) return
+    const src = tree.byOcc.get(srcId)
+    const tgt = tree.byOcc.get(targetId)
+    if (!src || !tgt || src.occ.id === tgt.occ.id || tgt.depth === 0) return
+    const newParent = tgt.occ.parent_id
+    if (!canMoveInto(tree, srcId, newParent)) {
+      setToast({ text: 'Нельзя переместить сборку внутрь самой себя', bad: true })
+      return
+    }
+    const oldParent = src.occ.parent_id
+    const moved: Occurrence = { ...src.occ, parent_id: newParent }
+
+    const siblings = snap.occurrences
+      .filter((o) => o.parent_id === newParent && o.id !== srcId)
+      .sort((a, b) => a.sort - b.sort)
+    const at = Math.max(0, siblings.findIndex((o) => o.id === targetId))
+    const insertAt = pos === 'before' ? at : at + 1
+    const ordered = [...siblings.slice(0, insertAt), moved, ...siblings.slice(insertAt)]
+
+    const changed = new Map<string, Occurrence>()
+    ordered.forEach((o, i) => changed.set(o.id, { ...o, sort: i + 1 }))
+    if (oldParent !== newParent) {
+      snap.occurrences
+        .filter((o) => o.parent_id === oldParent && o.id !== srcId)
+        .sort((a, b) => a.sort - b.sort)
+        .forEach((o, i) => changed.set(o.id, { ...o, sort: i + 1 }))
+    }
+
+    void commit(
+      `Порядок: ${src.item.name}`,
+      (s) => ({ ...s, occurrences: s.occurrences.map((o) => changed.get(o.id) ?? o) }),
+      async () => {
+        for (const o of changed.values()) await repo.updateOcc(o)
+      },
     )
   }
 
@@ -422,90 +473,97 @@ export function ProductPage({
       )}
 
       <div className="toolbar">
-        <input
-          type="search"
-          placeholder="Поиск по номеру ТС или наименованию…"
-          value={f.q}
-          onChange={(e) => setF({ ...f, q: e.target.value })}
-        />
-        <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as Kind | 'all' })}>
-          <option value="all">Все типы</option>
-          {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
-            <option key={k} value={k}>
-              {KIND_LABEL[k]}
-            </option>
-          ))}
-        </select>
-        <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value as StatusFilter })}>
-          <option value="all">Любой статус</option>
-          <option value="new">Не начато</option>
-          <option value="wip">В работе</option>
-          <option value="done">Готово</option>
-        </select>
-        <button className={`chip-toggle${f.mine ? ' on' : ''}`} onClick={() => setF({ ...f, mine: !f.mine })}>
-          Мои задачи
+        <button className={`chip-toggle${view === 'tree' ? ' on' : ''}`} onClick={() => setView('tree')}>
+          Структура
         </button>
-        <button className={`chip-toggle${f.overdue ? ' on' : ''}`} onClick={() => setF({ ...f, overdue: !f.overdue })}>
-          Просроченные
+        <button className={`chip-toggle${view === 'qty' ? ' on' : ''}`} onClick={() => setView('qty')}>
+          Количество по изделию
         </button>
-        <div className="grow" />
-        <button
-          className="btn sm"
-          onClick={() => {
-            if (!tree) return
-            const ids: string[] = []
-            walk(tree.roots, (n) => {
-              if (n.children.length) ids.push(n.occ.id)
-            })
-            setCollapsed(new Set(ids))
-          }}
-        >
-          Свернуть всё
-        </button>
-        <button className="btn sm" onClick={() => setCollapsed(new Set())}>
-          Развернуть всё
-        </button>
-        <span className="small muted">
-          {rows.length} из {kpi?.total ?? 0}
-        </span>
       </div>
 
-      {tree && (
-        <TreeTable
-          rows={rows}
-          tree={tree}
-          people={people}
-          canEdit={canEdit}
-          canStructure={canStructure}
-          collapsed={collapsed}
-          q={f.q.trim()}
-          selected={selected}
-          onSelect={setSelected}
-          onToggleCollapse={(id) =>
-            setCollapsed((c) => {
-              const n = new Set(c)
-              if (n.has(id)) n.delete(id)
-              else n.add(id)
-              return n
-            })
-          }
-          onToggleStage={onToggleStage}
-          onField={onField}
-          onAdd={(parent) => setAdding({ parent })}
-          onEdit={(item) => setEditing(item)}
-          onMove={(occ) => setMoving(tree.byOcc.get(occ.id) ?? null)}
-          onDelete={(node) => setDeleting(node)}
-          onUsage={(item) => setUsage(item)}
-          onDrop={(src, target) => {
-            const node = tree.byOcc.get(src)
-            if (!node || node.depth === 0) return
-            if (!canMoveInto(tree, src, target)) {
-              setToast({ text: 'Сюда нельзя: цель внутри переносимой сборки', bad: true })
-              return
-            }
-            void onMoveNode(node, target)
-          }}
-        />
+      {view === 'qty' ? (
+        tree && <QtyTable tree={tree} onUsage={setUsage} />
+      ) : (
+        <>
+          <div className="toolbar">
+            <input
+              type="search"
+              placeholder="Поиск по номеру ТС или наименованию…"
+              value={f.q}
+              onChange={(e) => setF({ ...f, q: e.target.value })}
+            />
+            <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as Kind | 'all' })}>
+              <option value="all">Все типы</option>
+              {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
+                <option key={k} value={k}>
+                  {KIND_LABEL[k]}
+                </option>
+              ))}
+            </select>
+            <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value as StatusFilter })}>
+              <option value="all">Любой статус</option>
+              <option value="new">Не начато</option>
+              <option value="wip">В работе</option>
+              <option value="done">Готово</option>
+            </select>
+            <button className={`chip-toggle${f.mine ? ' on' : ''}`} onClick={() => setF({ ...f, mine: !f.mine })}>
+              Мои задачи
+            </button>
+            <button className={`chip-toggle${f.overdue ? ' on' : ''}`} onClick={() => setF({ ...f, overdue: !f.overdue })}>
+              Просроченные
+            </button>
+            <div className="grow" />
+            <button
+              className="btn sm"
+              onClick={() => {
+                if (!tree) return
+                const ids: string[] = []
+                walk(tree.roots, (n) => {
+                  if (n.children.length) ids.push(n.occ.id)
+                })
+                setCollapsed(new Set(ids))
+              }}
+            >
+              Свернуть всё
+            </button>
+            <button className="btn sm" onClick={() => setCollapsed(new Set())}>
+              Развернуть всё
+            </button>
+            <span className="small muted">
+              {rows.length} из {kpi?.total ?? 0}
+            </span>
+          </div>
+
+          {tree && (
+            <TreeTable
+              rows={rows}
+              tree={tree}
+              people={people}
+              canEdit={canEdit}
+              canStructure={canStructure}
+              collapsed={collapsed}
+              q={f.q.trim()}
+              selected={selected}
+              onSelect={setSelected}
+              onToggleCollapse={(id) =>
+                setCollapsed((c) => {
+                  const n = new Set(c)
+                  if (n.has(id)) n.delete(id)
+                  else n.add(id)
+                  return n
+                })
+              }
+              onToggleStage={onToggleStage}
+              onField={onField}
+              onQty={onQty}
+              onAdd={(parent) => setAdding({ parent })}
+              onEdit={(item) => setEditing(item)}
+              onMove={(occ) => setMoving(tree.byOcc.get(occ.id) ?? null)}
+              onDelete={(node) => setDeleting(node)}
+              onReorder={onReorder}
+            />
+          )}
+        </>
       )}
 
       {adding && (
