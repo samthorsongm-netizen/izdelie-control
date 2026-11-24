@@ -204,7 +204,6 @@ export function TreeTable(p: TreeTableProps) {
             const st = statusOf(item)
             const overdue = isOverdue(item)
             const soon = !overdue && isSoon(item)
-            // тащим поверх другой строки — вставляем до/после неё (в том же родителе)
             const canDropHere = !!dragId && dragId !== n.occ.id && n.depth > 0
             const dropPos = over?.id === n.occ.id ? over.pos : null
 
@@ -235,17 +234,21 @@ export function TreeTable(p: TreeTableProps) {
                 }}
               >
                 <td className="name-col">
-                  <div
-                    className="name-cell"
-                    style={{ paddingLeft: 4 + n.depth * 16 }}
-                    draggable={p.canStructure && n.depth > 0}
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = 'move'
-                      e.dataTransfer.setData('text/plain', n.occ.id)
-                      setDragId(n.occ.id)
-                    }}
-                    onDragEnd={() => setDragId(null)}
-                  >
+                  <div className="name-cell" style={{ paddingLeft: 2 + n.depth * 16 }}>
+                    <span
+                      className={`grip${p.canStructure && n.depth > 0 ? '' : ' off'}`}
+                      draggable={p.canStructure && n.depth > 0}
+                      title="Перетащить строку"
+                      onClick={(e) => e.stopPropagation()}
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', n.occ.id)
+                        setDragId(n.occ.id)
+                      }}
+                      onDragEnd={() => setDragId(null)}
+                    >
+                      ⠿
+                    </span>
                     <span
                       className={`twisty${n.children.length ? '' : ' empty'}`}
                       onClick={(e) => {
@@ -274,7 +277,6 @@ export function TreeTable(p: TreeTableProps) {
                   <QtyCell value={n.occ.qty} disabled={!p.canStructure} onCommit={(v) => p.onQty(n.occ, v)} />
                 </td>
 
-                {/* 3D */}
                 <td className="c">
                   <Tick
                     on={!!item.stages.st_3d}
@@ -301,7 +303,6 @@ export function TreeTable(p: TreeTableProps) {
                   />
                 </td>
 
-                {/* Чертёж */}
                 <td className="c">
                   {isBch(item.kind) ? (
                     <button className="bch-ref" title="Чертёж находится на документе БЧ" onClick={() => p.onEdit(item)}>
@@ -334,7 +335,6 @@ export function TreeTable(p: TreeTableProps) {
                   />
                 </td>
 
-                {/* остальные этапы */}
                 {(['st_dwg_check', 'st_spec', 'st_card', 'st_green_doc', 'st_cm_3d', 'st_cm_dwg', 'st_notice'] as StageId[]).map((id) => (
                   <td className="c" key={id}>
                     <Tick
@@ -409,8 +409,7 @@ export function TreeTable(p: TreeTableProps) {
       {p.rows.length > 0 && (
         <div className="row" style={{ padding: '10px 12px', borderTop: '1px solid var(--line-soft)' }}>
           <span className="small muted">
-            Строк: {p.rows.length}. Перетащите строку на другую, чтобы переставить по порядку; «⇄» — перенос в другую
-            сборку; «+» — добавить внутрь. Количество — только для этой сборки.
+            Строк: {p.rows.length}. Тащить за ⠿ слева — переставить по порядку; «⇄» — в другую сборку; «+» — внутрь.
           </span>
         </div>
       )}
