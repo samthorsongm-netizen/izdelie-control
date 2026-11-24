@@ -80,7 +80,9 @@ export function AddDialog({
     >
       <div className="field">
         <label>Куда добавляем</label>
-        <div><b>{parentName}</b></div>
+        <div>
+          <b>{parentName}</b>
+        </div>
       </div>
 
       <div className="row" style={{ marginBottom: 12 }}>
@@ -97,17 +99,11 @@ export function AddDialog({
           <div className="field">
             <label>Номер ТС или наименование</label>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="начните вводить…" autoFocus />
-            <div className="hint">
-              Одна и та же позиция может стоять в разных сборках — отметки у неё общие.
-            </div>
+            <div className="hint">Одна и та же позиция может стоять в разных сборках — отметки у неё общие.</div>
           </div>
           <div className="opt-list">
             {found.map((i) => (
-              <div
-                key={i.id}
-                className={`opt${picked?.id === i.id ? ' sel' : ''}`}
-                onClick={() => setPicked(i)}
-              >
+              <div key={i.id} className={`opt${picked?.id === i.id ? ' sel' : ''}`} onClick={() => setPicked(i)}>
                 <div className="t">
                   <div>{i.name}</div>
                   <div className="small muted">
@@ -144,7 +140,11 @@ export function AddDialog({
           {isBch(kind) && (
             <div className="field">
               <label>Чертёж находится на БЧ</label>
-              <input value={bchRef} onChange={(e) => setBchRef(e.target.value)} placeholder="номер БЧ-документа или группового чертежа" />
+              <input
+                value={bchRef}
+                onChange={(e) => setBchRef(e.target.value)}
+                placeholder="номер БЧ-документа или группового чертежа"
+              />
               <div className="hint">У БЧ-позиции своего чертежа нет — отмечается чертёж того документа, где она нарисована.</div>
             </div>
           )}
@@ -212,12 +212,24 @@ export function EditItemDialog({
               </option>
             ))}
           </select>
+          <div className="hint">
+            Деталь ↔ Деталь БЧ, Сборка ↔ Сборка БЧ менять можно в любой момент. Смена типа меняет набор этапов и
+            пересчитывает готовность; отметки не стираются.
+          </div>
         </div>
       </div>
       {isBch(draft.kind) && (
         <div className="field">
-          <label>Чертёж находится на БЧ</label>
-          <input value={draft.bch_ref ?? ''} onChange={(e) => set({ bch_ref: e.target.value.trim() || null })} />
+          <label>Чертёж находится на БЧ (номер БЧ-документа)</label>
+          <input
+            value={draft.bch_ref ?? ''}
+            onChange={(e) => set({ bch_ref: e.target.value.trim() || null })}
+            placeholder="например 6282-2103810-10"
+          />
+          <div className="hint">
+            У БЧ своего чертежа нет — в дереве вместо галки будет номер того документа, где деталь нарисована. Заполните
+            его, иначе в колонке будет «БЧ?».
+          </div>
         </div>
       )}
       <div className="grid2">
