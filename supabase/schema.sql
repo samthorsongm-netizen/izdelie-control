@@ -134,6 +134,15 @@ create policy events_read on public.events for select to authenticated using (tr
 drop policy if exists events_insert on public.events;
 create policy events_insert on public.events for insert to authenticated with check (true);
 
+-- ---------- права на таблицы ----------
+-- Новые проекты Supabase НЕ выдают GRANT автоматически: без этого блока
+-- авторизованный пользователь получает «permission denied for table profiles».
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+alter default privileges in schema public grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public grant usage, select on sequences to authenticated;
+
 -- история живёт 30 дней (pg_cron есть в Supabase; если недоступен — чистите вручную)
 do $$ begin
   create extension if not exists pg_cron;
