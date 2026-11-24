@@ -31,7 +31,8 @@ jobs:
         with:
           node-version: 22
 
-      - run: pnpm install --no-frozen-lockfile
+      # strict-dep-builds=false: сборка esbuild нам не нужна (бинарник едет в @esbuild/* пакете)
+      - run: pnpm install --no-frozen-lockfile --config.strict-dep-builds=false
 
       # адрес и anon-ключ Supabase — в Settings → Secrets and variables → Actions → Variables
       - run: pnpm build
