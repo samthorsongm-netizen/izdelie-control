@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import type { Item, Occurrence, StageId } from '../model/types'
 import { KIND_LABEL } from '../model/types'
 import { STATUS_LABEL, hasStage, isBch, isOverdue, isSoon, statusOf } from '../model/stages'
-import { canMoveInto, progress as nodeProgress, type Node, type Tree } from '../model/tree'
+import { canMoveInto, parentCount, progress as nodeProgress, type Node, type Tree } from '../model/tree'
 
 export interface TreeTableProps {
   rows: Node[]
   tree: Tree
+  people: string[]
   canEdit: boolean
   canStructure: boolean
   collapsed: Set<string>
@@ -77,6 +78,39 @@ function TextCell({
   )
 }
 
+/** Ответственный: выбор из пользователей. Старое значение вне списка не теряем. */
+function PersonCell({
+  value,
+  people,
+  disabled,
+  onCommit,
+  emptyHighlight,
+}: {
+  value: string | null
+  people: string[]
+  disabled?: boolean
+  onCommit: (v: string) => void
+  emptyHighlight?: boolean
+}) {
+  const v = value ?? ''
+  const options = v && !people.includes(v) ? [...people, v] : people
+  return (
+    <select
+      className={`cell-input${emptyHighlight && !v ? ' empty' : ''}`}
+      value={v}
+      disabled={disabled}
+      onChange={(e) => onCommit(e.target.value)}
+    >
+      <option value="">—</option>
+      {options.map((person) => (
+        <option key={person} value={person}>
+          {person}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 /** Галка этапа: серый прочерк = этап для этого типа не нужен. */
 function Tick({ on, applicable, onClick, disabled }: { on: boolean; applicable: boolean; onClick: () => void; disabled?: boolean }) {
   if (!applicable) return <button className="tick na" disabled tabIndex={-1}>·</button>
@@ -114,7 +148,7 @@ export function TreeTable(p: TreeTableProps) {
           <tr className="cols">
             <th className="name-col">Наименование</th>
             <th>Тип</th>
-            <th className="c">Кол-во</th>
+            <th className="c" title="Количество в этой сборке">Кол-во</th>
             <th className="c" title="3D">3D</th>
             <th>Ответственный</th>
             <th>Срок</th>
@@ -140,7 +174,8 @@ export function TreeTable(p: TreeTableProps) {
             const isAssembly = item.kind === 'assembly' || item.kind === 'assembly_bch'
             const pr = nodeProgress(n)
             const st = statusOf(item)
-            const uses = p.tree.usesOf.get(item.id)?.length ?? 1
+            // сколько РАЗНЫХ сборок содержат эту позицию (не количество!)
+            const parents = parentCount(p.tree, item.id)
             const overdue = isOverdue(item)
             const soon = !overdue && isSoon(item)
             const canDropHere = isAssembly && dragId && canMoveInto(p.tree, dragId, n.occ.id) && dragId !== n.occ.id
@@ -199,16 +234,16 @@ export function TreeTable(p: TreeTableProps) {
                         </span>
                       )}
                     </span>
-                    {uses > 1 && (
+                    {parents > 1 && (
                       <button
                         className="usage-badge"
-                        title="Используется в нескольких местах — показать где"
+                        title="Одна и та же позиция стоит в нескольких сборках. Количество в колонке «Кол-во» — только для этой сборки."
                         onClick={(e) => {
                           e.stopPropagation()
                           p.onUsage(item)
                         }}
                       >
-                        ×{uses}
+                        в {parents} сборках
                       </button>
                     )}
                   </div>
@@ -230,8 +265,9 @@ export function TreeTable(p: TreeTableProps) {
                   />
                 </td>
                 <td>
-                  <TextCell
+                  <PersonCell
                     value={item.responsible_3d}
+                    people={p.people}
                     disabled={!p.canEdit || !hasStage(item.kind, 'st_3d')}
                     emptyHighlight={hasStage(item.kind, 'st_3d') && !item.stages.st_3d}
                     onCommit={(v) => p.onField(item, { responsible_3d: v || null }, `Ответственный за 3D — ${item.name}`)}
@@ -262,8 +298,9 @@ export function TreeTable(p: TreeTableProps) {
                   )}
                 </td>
                 <td>
-                  <TextCell
+                  <PersonCell
                     value={item.responsible_dwg}
+                    people={p.people}
                     disabled={!p.canEdit || !hasStage(item.kind, 'st_dwg')}
                     emptyHighlight={hasStage(item.kind, 'st_dwg') && !item.stages.st_dwg}
                     onCommit={(v) => p.onField(item, { responsible_dwg: v || null }, `Ответственный за чертёж — ${item.name}`)}

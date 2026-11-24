@@ -4,6 +4,8 @@ export interface Repo {
   mode: 'demo' | 'cloud'
   me: Profile | null
   listProducts(): Promise<Product[]>
+  /** имена пользователей для выпадающего списка ответственных */
+  listPeople(): Promise<string[]>
   loadProduct(id: string): Promise<Snapshot>
   createProduct(p: Product, cloneFrom?: string): Promise<void>
   deleteProduct(id: string): Promise<void>

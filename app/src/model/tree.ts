@@ -1,5 +1,5 @@
-import { progressOf } from './stages'
 import type { Item, Occurrence } from './types'
+import { progressOf } from './stages'
 
 export interface Node {
   occ: Occurrence
@@ -93,7 +93,6 @@ export function progress(node: Node): { own: number; withChildren: number; items
   }
 }
 
-
 /** Можно ли перетащить occId внутрь targetOccId (нельзя в себя и в своего потомка). */
 export function canMoveInto(tree: Tree, occId: string, targetOccId: string | null): boolean {
   if (!targetOccId) return true
@@ -103,6 +102,11 @@ export function canMoveInto(tree: Tree, occId: string, targetOccId: string | nul
   const source = tree.byOcc.get(occId)
   if (!source) return false
   return !subtree(source).some((n) => n.occ.id === targetOccId)
+}
+
+/** В скольких РАЗНЫХ сборках стоит позиция (не количество, а число родителей). */
+export function parentCount(tree: Tree, itemId: string): number {
+  return new Set((tree.usesOf.get(itemId) ?? []).map((o) => o.parent_id)).size
 }
 
 /** Путь «Сборка → Сборка → Деталь» для подсказки «где используется». */
