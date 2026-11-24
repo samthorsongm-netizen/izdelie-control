@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { Item, Occurrence, StageId } from '../model/types'
-import { KIND_LABEL } from '../model/types'
+import type { Item, Kind, Occurrence, StageId } from '../model/types'
+import { KINDS, KIND_LABEL } from '../model/types'
 import { STATUS_LABEL, hasStage, isBch, isOverdue, isSoon, statusOf } from '../model/stages'
 import { progress as nodeProgress, type Node, type Tree } from '../model/tree'
 
@@ -270,7 +270,24 @@ export function TreeTable(p: TreeTableProps) {
                 </td>
 
                 <td>
-                  <span className={`kind ${item.kind}`}>{KIND_LABEL[item.kind]}</span>
+                  {p.canEdit ? (
+                    <select
+                      className={`kind kind-select ${item.kind}`}
+                      value={item.kind}
+                      title="Изменить тип элемента"
+                      style={{ border: '1px solid transparent', cursor: 'pointer', maxWidth: 98 }}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => p.onField(item, { kind: e.target.value as Kind }, `Тип — ${item.name}`)}
+                    >
+                      {KINDS.map((k) => (
+                        <option key={k} value={k}>
+                          {KIND_LABEL[k]}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={`kind ${item.kind}`}>{KIND_LABEL[item.kind]}</span>
+                  )}
                 </td>
 
                 <td className="num">
@@ -410,6 +427,7 @@ export function TreeTable(p: TreeTableProps) {
         <div className="row" style={{ padding: '10px 12px', borderTop: '1px solid var(--line-soft)' }}>
           <span className="small muted">
             Строк: {p.rows.length}. Тащить за ⠿ слева — переставить по порядку; «⇄» — в другую сборку; «+» — внутрь.
+            Тип меняется кликом по нему.
           </span>
         </div>
       )}
