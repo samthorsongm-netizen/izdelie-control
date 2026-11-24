@@ -114,6 +114,17 @@ export const localRepo: Repo = {
     })
   },
 
+  async swapDesignations(aId: string, bId: string) {
+    await tx((db) => {
+      const a = db.items.find((i) => i.id === aId)
+      const b = db.items.find((i) => i.id === bId)
+      if (!a || !b) return
+      const tmp = a.designation
+      a.designation = b.designation
+      b.designation = tmp
+    })
+  },
+
   async loadProduct(id): Promise<Snapshot> {
     const db = await read()
     return {
