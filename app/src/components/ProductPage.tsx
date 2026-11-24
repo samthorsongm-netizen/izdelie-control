@@ -49,6 +49,7 @@ export function ProductPage({
   const [history, setHistory] = useState(false)
   const [busy, setBusy] = useState(false)
   const [undoInfo, setUndoInfo] = useState<{ label: string; n: number }>({ label: '', n: 0 })
+  const [people, setPeople] = useState<string[]>([])
   const undoRef = useRef<{ label: string; before: Snapshot }[]>([])
 
   const canEdit = me.role !== 'viewer'
@@ -72,6 +73,13 @@ export function ProductPage({
   useEffect(() => {
     void reload()
   }, [reload])
+
+  useEffect(() => {
+    repo
+      .listPeople()
+      .then(setPeople)
+      .catch(() => setPeople([]))
+  }, [repo])
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -466,6 +474,7 @@ export function ProductPage({
         <TreeTable
           rows={rows}
           tree={tree}
+          people={people}
           canEdit={canEdit}
           canStructure={canStructure}
           collapsed={collapsed}
