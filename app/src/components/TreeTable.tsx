@@ -23,6 +23,8 @@ export interface TreeTableProps {
   onMove: (occ: Occurrence) => void
   onDelete: (node: Node) => void
   onReorder: (sourceOccId: string, targetOccId: string, pos: 'before' | 'after') => void
+  onLink: (occ: Occurrence) => void
+  onGoTo: (itemId: string) => void
 }
 
 function Highlight({ text, q }: { text: string; q: string }) {
@@ -206,10 +208,12 @@ export function TreeTable(p: TreeTableProps) {
             const soon = !overdue && isSoon(item)
             const canDropHere = !!dragId && dragId !== n.occ.id && n.depth > 0
             const dropPos = over?.id === n.occ.id ? over.pos : null
+            const linkTarget = n.occ.link_item_id ? p.tree.byItemId.get(n.occ.link_item_id) : undefined
 
             return (
               <tr
                 key={n.occ.id}
+                data-occ={n.occ.id}
                 className={[
                   p.selected === n.occ.id ? 'sel' : '',
                   n.depth === 0 ? 'root' : '',
@@ -266,6 +270,30 @@ export function TreeTable(p: TreeTableProps) {
                         </span>
                       )}
                     </span>
+                    {linkTarget && (
+                      <button
+                        title={`Относится к: ${linkTarget.name}. Нажмите, чтобы перейти`}
+                        style={{
+                          marginLeft: 6,
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--accent)',
+                          cursor: 'pointer',
+                          fontSize: 10.5,
+                          padding: 0,
+                          maxWidth: 150,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          p.onGoTo(linkTarget.id)
+                        }}
+                      >
+                        → {linkTarget.name}
+                      </button>
+                    )}
                   </div>
                 </td>
 
@@ -401,7 +429,10 @@ export function TreeTable(p: TreeTableProps) {
                     )}
                     {p.canStructure && n.depth > 0 && (
                       <>
-                        <button className="btn ghost sm" title="Переместить в другую сборку" onClick={(e) => { e.stopPropagation(); p.onMove(n.occ) }}>
+                        <button className="btn ghost sm" title="К чему относится" onClick={(e) => { e.stopPropagation(); p.onLink(n.occ) }}>
+                          🔗
+                        </button>
+                        <button className="btn ghost sm" title="Переместить" onClick={(e) => { e.stopPropagation(); p.onMove(n.occ) }}>
                           ⇄
                         </button>
                         <button className="btn ghost sm" title="Удалить из сборки" onClick={(e) => { e.stopPropagation(); p.onDelete(n) }}>
@@ -426,8 +457,8 @@ export function TreeTable(p: TreeTableProps) {
       {p.rows.length > 0 && (
         <div className="row" style={{ padding: '10px 12px', borderTop: '1px solid var(--line-soft)' }}>
           <span className="small muted">
-            Строк: {p.rows.length}. Тащить за ⠿ слева — переставить по порядку; «⇄» — в другую сборку; «+» — внутрь.
-            Тип меняется кликом по нему.
+            Строк: {p.rows.length}. Тащить за ⠿ — переставить; «⇄» — в другую сборку; «🔗» — к чему относится; «+» —
+            внутрь.
           </span>
         </div>
       )}
