@@ -8,24 +8,32 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 export const cloudEnabled = Boolean(url && anon)
 
 /**
- * Жёсткий таймаут на запросы: если сеть «черная дыра», fetch висит минутами
- * и страница висит вместе с ним. Через 25 с отдаём понятную ошибку.
+ * Сеть рвёт отдельные соединения: 1 запрос из 4 висит 20 с, остальные — 80 мс.
+ * Для чтения (GET/HEAD) повторяем: блокируем на 8 с и пробуем заново, обычно
+ * вторая попытка проходит. Запись (POST/PATCH) не повторяем — был бы дубль.
  */
-const timedFetch: typeof fetch = (input, init) =>
-  Promise.race([
-    fetch(input, init),
-    new Promise<Response>((_, reject) =>
-      setTimeout(
-        () =>
-          reject(
-            new Error(
-              'Сервер Supabase не ответил за 25 секунд — похоже, сеть тормозит. Проверьте интернет и нажмите «Обновить».',
-            ),
-          ),
-        25000,
-      ),
-    ),
-  ]) as Promise<Response>
+const IS_SAFE = new Set(['GET', 'HEAD'])
+
+const timedFetch: typeof fetch = async (input, init) => {
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+  const attempts = IS_SAFE.has(method) ? 3 : 1
+  const limit = attempts > 1 ? 8000 : 60000
+  let lastError: unknown
+  for (let i = 0; i < attempts; i++) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), limit)
+    try {
+      return await fetch(input, { ...init, signal: ctrl.signal })
+    } catch (e) {
+      lastError = e
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  throw new Error(
+    `Сервер не ответил после ${attempts} попыток (${lastError instanceof Error ? lastError.message : String(lastError)}). Проверьте сеть и обновите страницу.`,
+  )
+}
 
 export const sb: SupabaseClient | null = cloudEnabled
   ? createClient(url!, anon!, { global: { fetch: timedFetch } })
