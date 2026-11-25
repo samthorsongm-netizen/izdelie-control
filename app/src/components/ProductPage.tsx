@@ -57,6 +57,7 @@ export function ProductPage({
   const [linking, setLinking] = useState<Occurrence | null>(null)
   const [view, setView] = useState<'tree' | 'qty'>('tree')
   const undoRef = useRef<{ label: string; before: Snapshot }[]>([])
+  const hasData = useRef(false)
 
   const canEdit = me.role !== 'viewer'
   const canStructure = me.role === 'admin'
@@ -69,15 +70,19 @@ export function ProductPage({
 
   const reload = useCallback(async () => {
     try {
-      setSnap(await repo.loadProduct(productId))
+      const s = await repo.loadProduct(productId)
+      hasData.current = true
+      setSnap(s)
       setError('')
     } catch (e) {
-      setError(msg(e))
+      // если данные уже на экране — фоновый сбой не должен рисовать баннер
+      if (!hasData.current) setError(msg(e))
+      throw e
     }
   }, [repo, productId])
 
   useEffect(() => {
-    void reload()
+    reload().catch(() => {})
   }, [reload])
 
   useEffect(() => {
@@ -423,7 +428,7 @@ export function ProductPage({
       setToast({ text: `Отменено: ${step.label}` })
     } catch (e) {
       setToast({ text: msg(e), bad: true })
-      await reload()
+      await reload().catch(() => {})
     } finally {
       setBusy(false)
       setUndoInfo({ label: undoRef.current[undoRef.current.length - 1]?.label ?? '', n: undoRef.current.length })
