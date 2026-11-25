@@ -10,6 +10,7 @@ import { AddDialog, EditItemDialog, type AddPayload } from './ItemDialog'
 import { MoveDialog } from './MoveDialog'
 import { HistoryDialog, UsageDialog } from './InfoDialogs'
 import { QtyTable } from './QtyTable'
+import { LinkDialog } from './LinkDialog'
 import { Confirm } from './Modal'
 import { exportXlsx } from './exportXlsx'
 
@@ -53,6 +54,7 @@ export function ProductPage({
   const [undoInfo, setUndoInfo] = useState<{ label: string; n: number }>({ label: '', n: 0 })
   const [people, setPeople] = useState<string[]>([])
   const [merging, setMerging] = useState<{ draft: Item; target: Item; old: string } | null>(null)
+  const [linking, setLinking] = useState<Occurrence | null>(null)
   const [view, setView] = useState<'tree' | 'qty'>('tree')
   const undoRef = useRef<{ label: string; before: Snapshot }[]>([])
 
@@ -154,7 +156,6 @@ export function ProductPage({
     )
   }
 
-  /** Перестановка строки относительно другой: вставить до/после в том же родителе. */
   const onReorder = (srcId: string, targetId: string, pos: 'before' | 'after') => {
     if (!snap || !tree || !canStructure) return
     const src = tree.byOcc.get(srcId)
@@ -193,7 +194,37 @@ export function ProductPage({
     )
   }
 
-  /** Сохранение свойств: если номер уже занят другой позицией — предлагаем объединить или обменять. */
+  /** Связь «относится к»: подсказка в дереве, структуру не меняет. */
+  const setLink = (occ: Occurrence, itemId: string | null) => {
+    setLinking(null)
+    if (!snap) return
+    const next: Occurrence = { ...occ, link_item_id: itemId }
+    const from = tree?.byItemId.get(occ.item_id)?.name ?? ''
+    const to = itemId ? tree?.byItemId.get(itemId)?.name ?? '' : ''
+    void commit(
+      itemId ? `Связь: ${from} → ${to}` : `Связь убрана: ${from}`,
+      (s) => ({ ...s, occurrences: s.occurrences.map((o) => (o.id === occ.id ? next : o)) }),
+      () => repo.updateOcc(next),
+    )
+  }
+
+  /** Перейти к позиции: раскрыть ветку, сбросить фильтр, прокрутить к строке. */
+  const goToItem = (itemId: string) => {
+    if (!tree) return
+    const occ = tree.usesOf.get(itemId)?.[0]
+    if (!occ) return
+    setCollapsed((c) => {
+      const n = new Set(c)
+      for (const a of ancestorsOf(tree, occ.id)) n.delete(a)
+      return n
+    })
+    setView('tree')
+    setF({ q: '', kind: 'all', status: 'all', mine: false, overdue: false })
+    setTimeout(() => {
+      document.querySelector(`[data-occ="${occ.id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 80)
+  }
+
   const onSaveItem = async (next: Item) => {
     setEditing(null)
     const d = next.designation?.trim()
@@ -211,7 +242,6 @@ export function ProductPage({
     onField(next, {}, `Свойства — ${next.name}`)
   }
 
-  /** Обмен номерами двух разных деталей: 1234 ↔ 1235. */
   const doSwap = async (draft: Item, target: Item, old: string) => {
     setMerging(null)
     if (!snap || !old.trim()) return
@@ -232,7 +262,6 @@ export function ProductPage({
     )
   }
 
-  /** Слияние двух записей одной детали: вхождения переезжают, отметки складываются. */
   const doMerge = async (draft: Item, target: Item) => {
     setMerging(null)
     if (!snap) return
@@ -261,7 +290,9 @@ export function ProductPage({
       (s) => ({
         ...s,
         items: s.items.filter((i) => i.id !== draft.id).map((i) => (i.id === target.id ? merged : i)),
-        occurrences: s.occurrences.map((o) => (o.item_id === draft.id ? { ...o, item_id: target.id } : o)),
+        occurrences: s.occurrences.map((o) =>
+          o.item_id === draft.id ? { ...o, item_id: target.id } : o.link_item_id === draft.id ? { ...o, link_item_id: target.id } : o,
+        ),
       }),
       () => repo.mergeItems(draft.id, target.id, merged),
     )
@@ -300,6 +331,7 @@ export function ProductPage({
       item_id: itemId,
       qty: payload.qty,
       sort,
+      link_item_id: null,
     }
     const name = item?.name ?? snap.items.find((i) => i.id === itemId)?.name ?? ''
     await commit(
@@ -632,6 +664,8 @@ export function ProductPage({
               onMove={(occ) => setMoving(tree.byOcc.get(occ.id) ?? null)}
               onDelete={(node) => setDeleting(node)}
               onReorder={onReorder}
+              onLink={(occ) => setLinking(occ)}
+              onGoTo={goToItem}
             />
           )}
         </>
@@ -665,6 +699,16 @@ export function ProductPage({
             setMoving(null)
             if (n) void onMoveNode(n, pid)
           }}
+        />
+      )}
+
+      {linking && (
+        <LinkDialog
+          items={snap.items}
+          currentItemId={linking.item_id}
+          linkedId={linking.link_item_id ?? null}
+          onClose={() => setLinking(null)}
+          onPick={(id) => setLink(linking, id)}
         />
       )}
 
