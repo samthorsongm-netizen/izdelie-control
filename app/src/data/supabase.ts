@@ -8,8 +8,9 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 export const cloudEnabled = Boolean(url && anon)
 
 /**
- * Сеть теряет ~20% соединений: теряный запрос молчит 19 с, обычный — 80-200 мс.
- * Поэтому чтение и вход повторяем с коротким таймаутом: 5 с на попытку, 3 попытки.
+ * Сеть теряет часть соединений: такой запрос молчит и доходит за 3-6 с,
+ * обычный — за 80-200 мс. Поэтому чтение и вход повторяем с таймаутом 15 с:
+ * меньше — обрывали бы рабочие запросы, больше — долго ждать мёртвые.
  * Запись не повторяем — были бы дубли.
  */
 const IS_SAFE = new Set(['GET', 'HEAD'])
@@ -17,11 +18,9 @@ const IS_SAFE = new Set(['GET', 'HEAD'])
 const timedFetch: typeof fetch = async (input, init) => {
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
   const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-  // вход можно повторять сколько угодно — это не создаёт данных,
-  // а зависший на минуту логин бесит больше всего
   const repeatable = IS_SAFE.has(method) || href.includes('/auth/v1/token')
-  const attempts = repeatable ? 3 : 1
-  const limit = repeatable ? 5000 : 60000
+  const attempts = repeatable ? 2 : 1
+  const limit = repeatable ? 15000 : 60000
   let lastError: unknown
   for (let i = 0; i < attempts; i++) {
     const ctrl = new AbortController()
@@ -271,13 +270,16 @@ export const cloudRepo: Repo = {
     const tick = async () => {
       if (stopped) return
       const startedAt = Date.now()
+      let ok = true
       try {
         await cb()
       } catch {
-        /* ошибку покажет сам экран */
+        ok = false
       }
       if (stopped) return
-      timer = setTimeout(tick, Math.max(5000 - (Date.now() - startedAt), 0))
+      // не получилось — не долбим сеть каждые 5 с, ждём 15
+      const gap = ok ? Math.max(5000 - (Date.now() - startedAt), 0) : 15000
+      timer = setTimeout(tick, gap)
     }
     timer = setTimeout(tick, 5000)
     return () => {
