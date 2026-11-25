@@ -88,15 +88,9 @@ export function ProductPage({
   }, [repo])
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const off = repo.subscribe(productId, () => {
-      clearTimeout(timer)
-      timer = setTimeout(() => void reload(), 300)
-    })
-    return () => {
-      clearTimeout(timer)
-      off()
-    }
+    // следующий опрос стартует только после завершения предыдущего
+    const off = repo.subscribe(productId, () => reload())
+    return () => off()
   }, [repo, productId, reload])
 
   const tree = useMemo(() => (snap ? buildTree(snap.items, snap.occurrences) : null), [snap])
