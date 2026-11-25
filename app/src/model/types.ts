@@ -48,6 +48,8 @@ export interface Occurrence {
   item_id: string
   qty: number
   sort: number
+  /** к какой позиции относится (напр. винты → крышка); только подсказка, структуру не меняет */
+  link_item_id?: string | null
 }
 
 export interface Product {
