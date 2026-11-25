@@ -8,10 +8,9 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 export const cloudEnabled = Boolean(url && anon)
 
 /**
- * Сеть теряет часть соединений: такой запрос молчит и доходит за 3-6 с,
- * обычный — за 80-200 мс. Поэтому чтение и вход повторяем с таймаутом 15 с:
- * меньше — обрывали бы рабочие запросы, больше — долго ждать мёртвые.
- * Запись не повторяем — были бы дубли.
+ * Мёртвое соединение молчит ~19 с, рабочий ответ приходит за 0.1-6 с.
+ * Поэтому чтение и вход: 4 попытки по 8 с — обрыв отсекается быстро, а
+ * нормальный ответ не трогается. Запись не повторяем — были бы дубли.
  */
 const IS_SAFE = new Set(['GET', 'HEAD'])
 
@@ -19,8 +18,8 @@ const timedFetch: typeof fetch = async (input, init) => {
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
   const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
   const repeatable = IS_SAFE.has(method) || href.includes('/auth/v1/token')
-  const attempts = repeatable ? 2 : 1
-  const limit = repeatable ? 15000 : 60000
+  const attempts = repeatable ? 4 : 1
+  const limit = repeatable ? 8000 : 60000
   let lastError: unknown
   for (let i = 0; i < attempts; i++) {
     const ctrl = new AbortController()
