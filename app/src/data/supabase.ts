@@ -9,15 +9,19 @@ export const cloudEnabled = Boolean(url && anon)
 
 /**
  * Сеть рвёт отдельные соединения: 1 запрос из 4 висит 20 с, остальные — 80 мс.
- * Для чтения (GET/HEAD) повторяем: блокируем на 8 с и пробуем заново, обычно
- * вторая попытка проходит. Запись (POST/PATCH) не повторяем — был бы дубль.
+ * Чтение и вход повторяем (блокируем на 8 с и пробуем заново), запись — нет,
+ * иначе получились бы дубли.
  */
 const IS_SAFE = new Set(['GET', 'HEAD'])
 
 const timedFetch: typeof fetch = async (input, init) => {
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
-  const attempts = IS_SAFE.has(method) ? 3 : 1
-  const limit = attempts > 1 ? 8000 : 60000
+  const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  // вход можно повторять сколько угодно — это не создаёт данных,
+  // а зависший на минуту логин бесит больше всего
+  const repeatable = IS_SAFE.has(method) || href.includes('/auth/v1/token')
+  const attempts = repeatable ? 3 : 1
+  const limit = repeatable ? 8000 : 60000
   let lastError: unknown
   for (let i = 0; i < attempts; i++) {
     const ctrl = new AbortController()
