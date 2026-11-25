@@ -23,7 +23,8 @@ export interface Repo {
   deleteOcc(id: string): Promise<void>
   log(e: EventLog): Promise<void>
   listEvents(productId: string, limit: number): Promise<EventLog[]>
-  subscribe(productId: string, cb: () => void): () => void
+  /** Подписка на изменения. Колбэк может вернуть Promise — следующий вызов ждёт его. */
+  subscribe(productId: string, cb: () => void | Promise<void>): () => void
   signIn?(email: string, password: string): Promise<void>
   signOut?(): Promise<void>
 }

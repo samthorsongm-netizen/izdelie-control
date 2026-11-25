@@ -7,17 +7,29 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 export const cloudEnabled = Boolean(url && anon)
 
-export const sb: SupabaseClient | null = cloudEnabled ? createClient(url!, anon!) : null
+/**
+ * Жёсткий таймаут на запросы: если сеть «черная дыра», fetch висит минутами
+ * и страница висит вместе с ним. Через 25 с отдаём понятную ошибку.
+ */
+const timedFetch: typeof fetch = (input, init) =>
+  Promise.race([
+    fetch(input, init),
+    new Promise<Response>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              'Сервер Supabase не ответил за 25 секунд — похоже, сеть тормозит. Проверьте интернет и нажмите «Обновить».',
+            ),
+          ),
+        25000,
+      ),
+    ),
+  ]) as Promise<Response>
 
-/** Разбудить проект Supabase, пока пользователь вводит пароль (free-план засыпает). */
-export async function warmup(): Promise<void> {
-  if (!cloudEnabled) return
-  try {
-    await fetch(`${url}/auth/v1/health`, { cache: 'no-store' })
-  } catch {
-    /* не критично */
-  }
-}
+export const sb: SupabaseClient | null = cloudEnabled
+  ? createClient(url!, anon!, { global: { fetch: timedFetch } })
+  : null
 
 /** Список людей не меняется каждую минуту — держим в памяти на сессию. */
 let peopleCache: string[] | null = null
@@ -70,11 +82,6 @@ export async function setRole(id: string, role: Role): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-/**
- * Создание пользователя без service-ключа: signUp во временном клиенте,
- * чтобы не сбить сессию администратора. Роль триггер ставит 'viewer',
- * нужную проставляем сразу после.
- */
 export async function createUser(email: string, password: string, name: string, role: Role): Promise<string> {
   const tmp = createClient(url!, anon!, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -149,7 +156,6 @@ export const cloudRepo: Repo = {
     const a = (data ?? []).find((x: { id: string }) => x.id === aId)
     const b = (data ?? []).find((x: { id: string }) => x.id === bId)
     if (!a || !b) throw new Error('Позиции для обмена не найдены')
-    // три шага через временный номер: уникальный индекс не даст обменять напрямую
     const steps: [string, string | null][] = [
       [aId, `__swap_${crypto.randomUUID()}`],
       [bId, a.designation],
@@ -244,14 +250,27 @@ export const cloudRepo: Repo = {
     return (data ?? []) as EventLog[]
   },
 
-  subscribe(productId, cb) {
-    const channel = db()
-      .channel(`product-${productId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `product_id=eq.${productId}` }, cb)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'occurrences', filter: `product_id=eq.${productId}` }, cb)
-      .subscribe()
+  // Realtime держит постоянные соединения (websocket + longpolling) и забивает
+  // слоты браузера: новые запросы висят в очереди по 8 минут. Вместо него —
+  // опрос, который не наслаивается: следующий тик только после завершения прошлого.
+  subscribe(_productId, cb) {
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = async () => {
+      if (stopped) return
+      const startedAt = Date.now()
+      try {
+        await cb()
+      } catch {
+        /* ошибку покажет сам экран */
+      }
+      if (stopped) return
+      timer = setTimeout(tick, Math.max(5000 - (Date.now() - startedAt), 0))
+    }
+    timer = setTimeout(tick, 5000)
     return () => {
-      void db().removeChannel(channel)
+      stopped = true
+      clearTimeout(timer)
     }
   },
 }
