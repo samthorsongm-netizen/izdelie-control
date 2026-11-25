@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { cloudEnabled, cloudRepo, loadProfile, resetPeopleCache, signIn, signOut, warmup } from './data/supabase'
+import { cloudEnabled, cloudRepo, loadProfile, resetPeopleCache, signIn, signOut } from './data/supabase'
 import { localRepo } from './data/local'
 import type { Repo } from './data/repo'
 import type { Profile } from './model/types'
@@ -23,10 +23,6 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('ui-theme', theme)
   }, [theme])
-
-  useEffect(() => {
-    void warmup()
-  }, [])
 
   useEffect(() => {
     if (!cloudEnabled) return
