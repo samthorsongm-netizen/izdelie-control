@@ -8,9 +8,9 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 export const cloudEnabled = Boolean(url && anon)
 
 /**
- * Сеть рвёт отдельные соединения: 1 запрос из 4 висит 20 с, остальные — 80 мс.
- * Чтение и вход повторяем (блокируем на 8 с и пробуем заново), запись — нет,
- * иначе получились бы дубли.
+ * Сеть теряет ~20% соединений: теряный запрос молчит 19 с, обычный — 80-200 мс.
+ * Поэтому чтение и вход повторяем с коротким таймаутом: 5 с на попытку, 3 попытки.
+ * Запись не повторяем — были бы дубли.
  */
 const IS_SAFE = new Set(['GET', 'HEAD'])
 
@@ -21,7 +21,7 @@ const timedFetch: typeof fetch = async (input, init) => {
   // а зависший на минуту логин бесит больше всего
   const repeatable = IS_SAFE.has(method) || href.includes('/auth/v1/token')
   const attempts = repeatable ? 3 : 1
-  const limit = repeatable ? 8000 : 60000
+  const limit = repeatable ? 5000 : 60000
   let lastError: unknown
   for (let i = 0; i < attempts; i++) {
     const ctrl = new AbortController()
