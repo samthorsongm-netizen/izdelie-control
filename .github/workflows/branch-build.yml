@@ -1,10 +1,20 @@
 name: Branch build
 
-# Проверка сборки ветки firebase без деплоя (сайт остаётся на main).
+# Ветка firebase: собрать и выложить на тот же GitHub Pages (тестовая сборка).
+# Живой сайт вернётся, если запустить workflow "Deploy to GitHub Pages" на main.
 on:
   push:
     branches: [firebase]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -23,3 +33,20 @@ jobs:
       - name: Build
         run: pnpm build
         working-directory: app
+      - name: Check Firebase env
+        run: grep -q 'VITE_FIREBASE_PROJECT_ID=izdelie-control' .env.production && echo 'firebase env on'
+        working-directory: app
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
