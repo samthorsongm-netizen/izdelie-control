@@ -261,9 +261,8 @@ export const firebaseRepo: Repo = {
   async listEvents(productId, count) {
     const q = query(collection(db(), 'events'), orderBy('created_at', 'desc'), qLimit(count))
     const snap = await getDocs(q)
-    return snap.docs
-      .map((x) => ({ id: x.id, ...(x.data() as Omit<EventLog, 'id'>) }))
-      .filter((e) => e.product_id === productId) as EventLog[]
+    // id в Firestore строковый, а в модели EventLog числовой (пришёл из Postgres) — не переносим
+    return snap.docs.map((x) => x.data() as Omit<EventLog, 'id'>).filter((e) => e.product_id === productId)
   },
 
   // опрос без наслоения: следующий тик только после завершения предыдущего
