@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Правила Firestore: читать может любой вошедший, писать — по роли.
+// Первого администратора создаёт владелец проекта в консоли:
+//   users/<uid> = { email: "...", name: "...", role: "admin" }
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function canEdit() {
+      return signedIn() && (role() == 'admin' || role() == 'editor');
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && role() == 'admin';
+    }
+
+    // справочник изделий меняет только админ
+    match /products/{id} {
+      allow read: if signedIn();
+      allow write: if signedIn() && role() == 'admin';
+    }
+
+    // структура: правят админ и редактор, читают все вошедшие
+    match /snapshots/{id} {
+      allow read: if signedIn();
+      allow write: if canEdit();
+    }
+
+    match /events/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+  }
+}
